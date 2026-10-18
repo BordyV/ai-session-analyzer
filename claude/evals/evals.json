@@ -1,0 +1,48 @@
+{
+  "skill_name": "claude-session-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "analyse mon historique claude du dernier mois et dis moi quels skills je devrais créer, et ce qui ne vaut pas le coup",
+      "expected_output": "Rapport basé sur l'historique réel (~/.claude/projects) : chiffres clés, sessions à friction avec cause racine, tâches répétitives, 2 à 4 recommandations priorisées (skill / règle CLAUDE.md / commande / hook / rien) avec brouillons, tenant compte des commandes .claude/commands déjà existantes, sans citer de contenu personnel.",
+      "files": [],
+      "assertions": [
+        "Le rapport s'appuie sur des chiffres tirés de l'historique réel (sessions, demandes ou tours)",
+        "Le rapport identifie le cycle commit / push / merge comme tâche récurrente",
+        "Le rapport tient compte des commandes existantes du projet (.claude/commands) au lieu de proposer de les recréer",
+        "Chaque recommandation précise le mécanisme (skill, règle CLAUDE.md, commande, hook ou rien) et l'emplacement du fichier",
+        "Le rapport fournit au moins un brouillon prêt à l'emploi (SKILL.md ou règle)",
+        "Le rapport dit explicitement ce qui ne vaut pas le coup d'être automatisé",
+        "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "sur le projet mon-projet j'ai l'impression de faire beaucoup d'allers-retours avec toi. tu peux regarder nos sessions et me dire où on tourne en rond et pourquoi ?",
+      "expected_output": "Analyse filtrée sur mon-projet : sessions les plus coûteuses lues en détail (--show-session), cause racine de chaque épisode (contexte manquant, procédure manuelle, environnement…), remèdes concrets (règle CLAUDE.md, skill, hook) et ce qui relève du travail exploratoire normal.",
+      "files": [],
+      "assertions": [
+        "L'analyse est limitée au projet mon-projet",
+        "Le rapport cite des sessions précises (id, date ou titre) comme exemples d'allers-retours",
+        "Pour chaque épisode cité, une cause racine est nommée (contexte manquant, procédure manuelle, environnement, demande floue…)",
+        "Le rapport distingue la friction évitable du travail exploratoire normal",
+        "Les remèdes proposés sont concrets (mécanisme, emplacement et contenu)",
+        "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
+      ]
+    },
+    {
+      "id": 3,
+      "prompt": "je te demande tout le temps de commit, push et merger. ça vaut le coup d'en faire un skill ou c'est inutile ?",
+      "expected_output": "Vérifie l'hypothèse dans l'historique (fréquence des demandes commit/push/merge, commandes git récurrentes, corrections éventuelles), puis tranche avec les preuves : skill, commande existante à réutiliser, règle CLAUDE.md, ou rien ; brouillon si recommandé.",
+      "files": [],
+      "assertions": [
+        "La réponse vérifie l'hypothèse dans l'historique avec des chiffres (demandes ou sessions commit/push/merge)",
+        "La réponse s'appuie aussi sur les commandes git réellement exécutées (git commit / push / merge)",
+        "La réponse donne un verdict clair (oui / non et mécanisme retenu)",
+        "La réponse examine au moins une alternative au skill (règle CLAUDE.md, commande existante, hook, rien)",
+        "Un brouillon prêt à l'emploi est fourni pour le mécanisme recommandé, reprenant les formulations réelles de l'utilisateur",
+        "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
+      ]
+    }
+  ]
+}

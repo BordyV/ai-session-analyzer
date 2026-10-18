@@ -1,0 +1,35 @@
+{
+  "skill_name": "copilot-session-analyzer",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Fais un audit de mon historique GitHub Copilot (CLI et VS Code) sur le dépôt billing-api et dis-moi ce qu'on devrait ajouter dans .github pour que toute l'équipe arrête de répéter les mêmes demandes. Mon dossier Copilot CLI est tests/fixtures/copilot-home, mon dossier VS Code User est tests/fixtures/vscode-user, le dossier github-copilot d'IntelliJ est tests/fixtures/jetbrains, et le dépôt est en tests/fixtures/repo.",
+      "expected_output": "Rapport : demandes récurrentes (tests JUnit 5 + Mockito, endpoints REST RFC 7807), corrections récurrentes (AssertJ, @DisplayName) transformées en instruction ciblée (.github/instructions/*.instructions.md avec applyTo) et/ou skill .github/skills, prise en compte du prompt file /nouveau-endpoint et du skill release-notes existants, boucle mvn test analysée.",
+      "files": [],
+      "assertions": [
+        "Le rapport détecte la demande récurrente de tests JUnit 5 + Mockito sur au moins 4 sessions, y compris celle d'IntelliJ",
+        "La correction récurrente AssertJ / @DisplayName devient une instruction (idéalement .github/instructions/*.instructions.md avec applyTo sur les tests)",
+        "Le rapport relève la demande récurrente d'endpoint REST avec erreurs RFC 7807",
+        "Le rapport tient compte du prompt file /nouveau-endpoint existant (l'améliorer plutôt que le dupliquer)",
+        "Les recommandations visent des emplacements .github (portée équipe)",
+        "Le rapport signale les échecs répétés de mvn test / verify et propose un remède",
+        "Le rapport signale les limites de lecture de l'historique IntelliJ",
+        "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
+      ]
+    },
+    {
+      "id": 2,
+      "prompt": "quels prompts je répète tout le temps à copilot ? est-ce que ça mérite un skill ou juste des instructions ? (mon historique copilot cli est dans tests/fixtures/copilot-home et celui de vscode dans tests/fixtures/vscode-user)",
+      "expected_output": "Liste des demandes répétées chiffrée (sessions, jours), distinction claire instruction (règle courte) vs skill (procédure), verdict argumenté pour chaque thème, brouillons prêts à copier, mention de /chronicle improve comme alternative pour les règles du dépôt.",
+      "files": [],
+      "assertions": [
+        "Le rapport liste les demandes répétées avec leur fréquence (sessions ou jours)",
+        "Le rapport distingue instruction (règle courte) et skill (procédure) avec une justification",
+        "Le rapport fournit au moins un brouillon prêt à copier",
+        "Les conventions de test (AssertJ, @DisplayName) sont orientées vers une instruction plutôt qu'un skill",
+        "Le rapport mentionne /chronicle (improve ou tips) comme complément natif de Copilot CLI",
+        "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
+      ]
+    }
+  ]
+}

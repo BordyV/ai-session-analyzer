@@ -1,0 +1,7 @@
+# Generated test data: rebuild with `python tests/make_fixtures.py tests/fixtures`
+tests/fixtures/
+__pycache__/
+*.pyc
+
+# Eval runs: reports built from real, private chat history. Never commit.
+workspaces/
