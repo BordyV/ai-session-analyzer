@@ -90,7 +90,7 @@ Suis `references/report-template.md`. Pour chaque skill recommandé, fournis un 
 
 Respecte la confidentialité : courts extraits uniquement, aucun secret, aucun nom de client, et les conversations hors travail résumées en une catégorie.
 
-Termine en proposant de créer la recommandation n° 1. N'écris rien dans `.github/` ni dans `~/.copilot/` sans l'accord explicite de l'utilisateur : ces fichiers changent le comportement de Copilot pour lui, ou pour toute l'équipe.
+Termine en proposant de créer la recommandation n° 1. Si le plugin `skill-creator` est installé, propose-le pour créer et tester le skill. N'écris rien dans `.github/` ni dans `~/.copilot/` sans l'accord explicite de l'utilisateur : ces fichiers changent le comportement de Copilot pour lui, ou pour toute l'équipe.
 
 ## Options utiles du script
 
