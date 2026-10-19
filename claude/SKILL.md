@@ -50,7 +50,6 @@ Ne te limite pas aux épisodes de friction : ils ne montrent que ce que l'utilis
 
 Ensuite, vérifie au plus juste :
 - **Une hypothèse** (« je demande souvent X ? », « Claude demande-t-il souvent Y ? ») : `--grep "motif"`, ou `--grep "motif" --grep-replies` pour chercher dans les réponses. Une commande donne les occurrences, les sessions, les jours et des exemples.
-  - Budget : 8 recherches au plus. Réserve-les aux chiffres qui fondent une recommandation ou un verdict « rien » / « sous le seuil » ; pour le reste (fréquences secondaires du tableau), reprends les chiffres du digest ou écris « non compté ».
   - Ajoute toujours `--grep-log "<dossier temporaire>/greps.md"` : chaque recherche est conservée, avec son motif et ses exemples.
   - Lis les exemples avant de citer le chiffre. Un exemple hors sujet (« prendre en compte » pour un compte de test, « le like sur tiktok » pour une publication) veut dire que le motif est trop large : resserre-le (mots plus précis, noms propres, verbes d'action) et relance. Ne cite que le chiffre du motif final, qui ne ramène plus de faux positif.
 - **Un épisode ambigu** : `--show-session <id>` affiche une vue compacte (tours signalés et leur contexte, environ 800 tokens). Ouvre **5 sessions au maximum**, et seulement si le digest ne permet pas de nommer la cause. Réserve `--full` aux cas exceptionnels.
