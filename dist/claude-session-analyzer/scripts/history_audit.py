@@ -64,7 +64,7 @@ class Turn:
         self.shell = []
         self.inputs = []  # (tool, fingerprint, text) of substantial non-shell tool inputs
         self.error_tools = Counter()
-        self.error_samples = []  # (tool, error text)
+        self.error_samples = []  # (tool, error text, shell command or "")
         self.reply = ""  # last assistant text of the turn
         self.guardrails = []  # [(category, phrase, offset)] found by session_metrics
         self.defects = []
@@ -94,6 +94,7 @@ class Session:
         self.commands = Counter()
         self.skills = Counter()
         self.metrics = {}
+        self.foreign = []  # (ts, "assistant" | "utilisateur", excerpt): changes attributed to another session
 
     def touch(self, ts):
         if ts is None:
@@ -230,6 +231,31 @@ def clean_prompt(text):
     return SYSTEM_BLOCK_RE.sub(" ", text or "").strip()
 
 
+# Work found in the folder that the assistant did not do: the trace of sessions running in parallel on the
+# same files. Matched on the accent-free, lower-case text.
+FOREIGN_RE = re.compile(
+    r"\b(une|l'|par une|d'une|dans une) ?autre session (claude )?(a |l'a|les a|qui|aurait|avait|en parallele|ouverte|"
+    r"tourne|a peut-etre|l'a peut-etre)"
+    r"|\banother (claude )?session (has|is|was|did|might|may|made|modified|changed|running)"
+    r"|\b(ne viennent|ne vient) pas de moi|\bpas (ete )?(fait|faite|faites|ecrit|ecrite|ecrites|modifiee?s?) par moi"
+    r"|\b(modifications?|changements?) (que je n'ai pas (faite?s?|ecrite?s?)|que je ne reconnais pas)\b"
+    r"|\bpar quelqu'un d'autre que moi|\bquelqu'un d'autre (a|que moi)\b"
+    r"|\bc'est toi (qui|ou)\b.{0,60}\bautre session"
+    r"|\bnot (made|written|done) by me\b|\bi didn'?t (make|write) (these|those|this)\b"
+    r"|\bchanges? (that|which) (aren'?t|are not|weren'?t) mine\b")
+
+
+def note_foreign(s, ts, who, text):
+    """Remember mentions of changes made by another session (or someone else) in the same folder."""
+    if not text or len(s.foreign) >= 20:
+        return
+    n = normalize(text)
+    m = FOREIGN_RE.search(n)
+    if m:
+        start = max(0, m.start() - 50)
+        s.foreign.append((ts, who, ("…" if start else "") + excerpt(n[start:], 170)))
+
+
 # --------------------------------------------------------------------------- Claude Code
 
 CLAUDE_BUILTIN_COMMANDS = set(
@@ -307,13 +333,14 @@ def claude_user_text(s, text, ts):
     txt = clean_prompt(raw)
     if txt:
         s.turns.append(Turn(ts, txt))
+        note_foreign(s, ts, "utilisateur", txt)
 
 
 def load_claude(claude_home):
     for path in sorted(glob.glob(os.path.join(claude_home, "projects", "*", "*.jsonl"))):
         s = Session("claude", os.path.splitext(os.path.basename(path))[0], path)
         project_dir = os.path.basename(os.path.dirname(path))
-        tool_ids = {}  # tool_use id -> tool name, to attribute errors
+        tool_ids = {}  # tool_use id -> (tool name, shell command), to attribute errors
         for o in read_jsonl(path):
             t = o.get("type")
             if t == "ai-title" and o.get("aiTitle"):
@@ -342,14 +369,16 @@ def load_claude(claude_home):
                         continue
                     if b.get("type") == "text" and (b.get("text") or "").strip():
                         cur.reply = b["text"]
+                        note_foreign(s, ts, "assistant", b["text"])
                     if b.get("type") != "tool_use":
                         continue
                     name = b.get("name") or "?"
                     cur.tools[name] += 1
-                    tool_ids[b.get("id")] = name
                     inp = b.get("input") if isinstance(b.get("input"), dict) else {}
-                    if name.lower() in SHELL_TOOLS and isinstance(inp.get("command"), str):
-                        cur.shell.append(inp["command"])
+                    cmd = inp.get("command") if name.lower() in SHELL_TOOLS and isinstance(inp.get("command"), str) else ""
+                    tool_ids[b.get("id")] = (name, cmd)
+                    if cmd:
+                        cur.shell.append(cmd)
                     if name == "Skill" and inp.get("skill"):
                         s.skills[str(inp["skill"])] += 1
                     record_tool_input(cur, name, inp)
@@ -378,10 +407,10 @@ def load_claude(claude_home):
                                 cur.rejections += 1
                                 counted_reject = True
                         elif denial in (None, ""):
-                            tool = tool_ids.get(b.get("tool_use_id"), "?")
+                            tool, cmd = tool_ids.get(b.get("tool_use_id"), ("?", ""))
                             cur.tool_errors += 1
                             cur.error_tools[tool] += 1
-                            cur.error_samples.append((tool, body))
+                            cur.error_samples.append((tool, body, cmd))
                     elif b.get("type") == "text":
                         texts.append(b.get("text") or "")
                 if texts:
@@ -409,6 +438,7 @@ def generic_prompt(s, text, ts):
     if m:
         s.commands[m.group(1)] += 1
     s.turns.append(Turn(ts, txt))
+    note_foreign(s, ts, "utilisateur", txt)
 
 
 def shell_command(tool_name, args):
@@ -481,6 +511,7 @@ def load_copilot_cli(copilot_home):
                 # Sub-agent chatter (parentToolCallId) is not what the user read.
                 if text and not data.get("parentToolCallId") and not o.get("agentId"):
                     cur.reply = text
+                    note_foreign(s, ts, "assistant", text)
             elif etype == "permission.completed" and cur is not None:
                 result = data.get("result") if isinstance(data.get("result"), dict) else {}
                 kind = str(result.get("kind") or "").lower()
@@ -490,9 +521,9 @@ def load_copilot_cli(copilot_home):
             elif etype == "tool.execution_start" and cur is not None:
                 name = first_str(data, "toolName", "name", "tool") or "?"
                 cur.tools[name] += 1
-                tool_ids[data.get("toolCallId")] = name
                 args = data.get("arguments") or data.get("args") or data.get("input")
                 cmd = shell_command(name, args)
+                tool_ids[data.get("toolCallId")] = (name, cmd or "")
                 if cmd:
                     cur.shell.append(cmd)
                 if isinstance(args, str):
@@ -510,10 +541,10 @@ def load_copilot_cli(copilot_home):
                     if re.search(r"(?i)\b(denied|rejected|declined|cancel)", text[:500]):
                         cur.rejections += 1
                     else:
-                        tool = tool_ids.get(data.get("toolCallId"), first_str(data, "toolName") or "?")
+                        tool, cmd = tool_ids.get(data.get("toolCallId"), (first_str(data, "toolName") or "?", ""))
                         cur.tool_errors += 1
                         cur.error_tools[tool] += 1
-                        cur.error_samples.append((tool, text))
+                        cur.error_samples.append((tool, text, cmd))
             elif etype in ("abort", "session.abort", "user.abort", "turn.abort") and cur is not None:
                 cur.interrupted = True
             elif etype == "skill.invoked":
@@ -704,22 +735,25 @@ def vscode_session(state, sid, path, project, cwd):
                 continue
             tool = p.get("toolId") or "?"
             cur.tools[tool] += 1
+            data = p.get("toolSpecificData") if isinstance(p.get("toolSpecificData"), dict) else {}
+            cmd = ""
+            if data.get("kind") == "terminal":
+                cl = data.get("commandLine")
+                cmd = cl.get("original") if isinstance(cl, dict) else cl
+                cmd = cmd if isinstance(cmd, str) else ""
+                if cmd:
+                    cur.shell.append(cmd)
             if p.get("resultError"):
                 cur.tool_errors += 1
                 cur.error_tools[tool] += 1
-                cur.error_samples.append((tool, flatten_text(p.get("resultError"))))
+                cur.error_samples.append((tool, flatten_text(p.get("resultError")), cmd))
             confirmed = p.get("isConfirmed")
             # ToolConfirmKind.Denied = 0, Skipped = 5; pre-1.104 used a boolean.
             if confirmed is False or (isinstance(confirmed, dict) and confirmed.get("type") in (0, 5)):
                 cur.rejections += 1
-            data = p.get("toolSpecificData") if isinstance(p.get("toolSpecificData"), dict) else {}
-            if data.get("kind") == "terminal":
-                cl = data.get("commandLine")
-                cmd = cl.get("original") if isinstance(cl, dict) else cl
-                if isinstance(cmd, str):
-                    cur.shell.append(cmd)
         if markdown:
             cur.reply = "".join(markdown)
+            note_foreign(s, ts, "assistant", cur.reply)
     return s
 
 
@@ -1149,6 +1183,19 @@ def correction_label(text):
     return None
 
 
+NO_LABELS = {CORRECTION_PATTERNS[0][1], "« arrête » / « stop »"}
+
+
+def declines_offer(text, prev_reply):
+    """A bare "non" / "non, stop" answering a question of the assistant ("je l'ajoute ?") refuses an offer:
+    the assistant did nothing wrong yet, so it is not a correction."""
+    if not (prev_reply or "").strip().rstrip("*_` \n").endswith("?"):
+        return False
+    head = normalize(text)[:200]
+    labels = {label for rx, label in CORRECTION_RES if rx.search(head)}
+    return bool(labels) and labels <= NO_LABELS
+
+
 # --------------------------------------------------------------------------- guardrails & defect reports
 #
 # Guardrails: the user pre-empts the assistant ("sans coder", "ne fais pas le build", "attends mon go").
@@ -1339,7 +1386,7 @@ def compute_idf(sessions):
 
 
 def session_metrics(s, idf):
-    corrections = rephrasings = guardrails = defects = 0
+    corrections = rephrasings = guardrails = defects = declined = 0
     labels = Counter()
     prev = None
     for i, t in enumerate(s.turns):
@@ -1354,7 +1401,10 @@ def session_metrics(s, idf):
             t.flags.append("DEFAUT_SIGNALE")
         if t.kind == "prompt" and i > 0:
             label = correction_label(t.text)
-            if label:
+            if label and declines_offer(t.text, s.turns[i - 1].reply):
+                declined += 1
+                t.flags.append("REFUS_PROPOSITION")
+            elif label:
                 corrections += 1
                 labels[label] += 1
                 t.flags.append("CORRECTION")
@@ -1383,6 +1433,7 @@ def session_metrics(s, idf):
         "rounds": len(s.turns),
         "prompts": len(s.prompts()),
         "corrections": corrections,
+        "declined_offers": declined,
         "rephrasings": rephrasings,
         "guardrails": guardrails,
         "defects": defects,
@@ -1748,21 +1799,35 @@ def drop_copied_turns(sessions):
     return sessions
 
 
+def unknown_project(s):
+    """Sessions the store does not tie to a folder (VS Code empty window, old JetBrains stores)."""
+    return not s.cwd and (not s.project or s.project == "(sans dossier)" or s.project.startswith("jetbrains:"))
+
+
 def select_sessions(sessions, args):
+    """Sessions matching the filters. With --project, sessions whose project is unknown cannot be matched:
+    they are set aside in args.unscoped so the digest can list them instead of silently dropping them."""
     cutoff = NOW - dt.timedelta(days=args.days) if args.days else None
     proj = (args.project or "").lower()
     excluded = [e.lower() for e in args.exclude_session or []]
-    kept = []
+    excluded_projects = [p.lower() for p in getattr(args, "exclude_project", None) or []]
+    kept, unscoped = [], []
     for s in sessions:
         if not s.turns:
             continue
         if cutoff and (s.end or s.start) and (s.end or s.start) < cutoff:
             continue
-        if proj and proj not in (s.project or "").lower() and proj not in (s.cwd or "").lower():
-            continue
         if any(s.id.lower().startswith(e) for e in excluded):
             continue
+        where = ((s.project or "") + " " + (s.cwd or "")).lower()
+        if any(p in where for p in excluded_projects):
+            continue
+        if proj and proj not in (s.project or "").lower() and proj not in (s.cwd or "").lower():
+            if unknown_project(s):
+                unscoped.append(s)
+            continue
         kept.append(s)
+    args.unscoped = unscoped
     return kept
 
 
@@ -1886,7 +1951,7 @@ def tool_error_report(sessions, limit=8, chars=140):
     groups = defaultdict(lambda: {"count": 0, "sessions": set(), "example": ""})
     for s in sessions:
         for t in s.turns:
-            for tool, text in t.error_samples:
+            for tool, text, _cmd in t.error_samples:
                 first = next((ln.strip() for ln in (text or "").splitlines() if ln.strip()), "")
                 sig = re.sub(r"[\w.-]*[\\/][^\s'\"]*", "<chemin>", normalize(first))
                 sig = re.sub(r"\d+", "0", sig)[:70]
@@ -1898,6 +1963,190 @@ def tool_error_report(sessions, limit=8, chars=140):
             for k, v in groups.items()]
     rows.sort(key=lambda r: (-r["count"], -r["sessions"]))
     return rows[:limit]
+
+
+# Why a tool call failed, from the start of its error message (accent-free, lower case). The order matters:
+# the first match wins. Most of these cost the user nothing visible, only time and tokens, so they never show
+# up as corrections: this is where the assistant can improve without the user having to say anything.
+ERROR_CAUSES = [
+    ("dossier", "mauvais dossier ou pas un dépôt git",
+     r"not a git repository|n'est pas un depot|cannot find path|could not find (a part of )?the path|"
+     r"chemin d'acces (specifie )?introuvable|no such file or directory"),
+    ("edition", "édition de fichier ratée par l'assistant",
+     r"string to replace not found|old_string|file has not been read|has been modified since|must be read|"
+     r"found \d+ matches|is not unique|file not read"),
+    ("environnement", "commande, interpréteur ou module introuvable",
+     r"command not found|n'est pas reconnu|is not recognized|introuvable|not found|enoent|no module named|"
+     r"modulenotfounderror|cannot find module|is not installed|n'est pas installe"),
+    ("syntaxe", "syntaxe du shell (guillemets, heredoc, bash / PowerShell)",
+     r"syntax error|unexpected (eof|token|end of file)|unterminated|parsererror|missing terminator|here-document|"
+     r"unexpected character|the string is missing|jeton inattendu|erreur de syntaxe"),
+    ("delai", "délai dépassé", r"timed? ?out|timeout|deadline exceeded|delai (d'attente )?depasse"),
+    ("acces", "permission ou accès refusé",
+     r"permission denied|access (is )?denied|acces refuse|eacces|eperm|operation not permitted|unauthorized|forbidden"),
+    ("tests", "tests ou build en échec",
+     r"tests? run:|build failure|failures?:|failed tests?|npm err|error ts\d|compilation (failed|error)|"
+     r"echec de la compilation|assertionerror|build failed"),
+    ("muet", "échec sans message exploitable (code de sortie seul)", r"^$"),
+]
+ERROR_CAUSE_RES = [(key, label, re.compile(rx)) for key, label, rx in ERROR_CAUSES]
+
+
+EXIT_LINE_RE = re.compile(r"(?i)^(error:? )?(exit code|exited with code|process exited with code|command failed:? exit code)"
+                          r"\s*:?\s*-?\d+:?\s*")
+NOISE_LINE_RE = re.compile(r"^<[\w-]+/?>$|^This result includes Artifact content")
+ERROR_WORD_RE = re.compile(r"(?i)error|erreur|exception|failed|failure|echec|échec|introuvable|not found|cannot|can't|"
+                           r"impossible|denied|refus|timed out|fatal|traceback|au caract[eè]re|unexpected|invalid")
+
+
+def error_message(text):
+    """The informative lines of an error: without the 'Exit code N' header and bare marker lines."""
+    lines = [ln.strip() for ln in (text or "").splitlines() if ln.strip() and not NOISE_LINE_RE.match(ln.strip())]
+    if lines:
+        lines[0] = EXIT_LINE_RE.sub("", lines[0]).strip()
+    return [ln for ln in lines if ln]
+
+
+def error_line(lines):
+    """A shell error mixes stdout and stderr: show the first line that reads like an error, else the last one."""
+    return next((ln for ln in lines if ERROR_WORD_RE.search(ln)), lines[-1] if lines else "")
+
+
+def error_cause(tool, text):
+    lines = error_message(text)
+    if not lines:
+        return "muet", ERROR_CAUSES[-1][1]
+    joined = " ".join(" ".join(lines).split())
+    head = normalize(error_line(lines) + " " + joined[:300] + " " + joined[-500:])
+    for key, label, rx in ERROR_CAUSE_RES:
+        if rx.search(head):
+            return key, label
+    if tool_family(tool).startswith("mcp:"):
+        return "externe", "outil externe (serveur MCP, navigateur)"
+    return "autre", "autre (message à lire)"
+
+
+def tool_error_causes(sessions, examples=3, chars=120):
+    """Tool failures grouped by cause, with the commands that fail most: the assistant's own avoidable cost."""
+    causes = {}
+    for s in sessions:
+        for t in s.turns:
+            for tool, text, cmd in t.error_samples:
+                key, label = error_cause(tool, text)
+                c = causes.setdefault(key, {"label": label, "count": 0, "sessions": set(), "tools": Counter(),
+                                            "commands": Counter(), "examples": []})
+                c["count"] += 1
+                c["sessions"].add(s.id)
+                c["tools"][tool_family(tool)] += 1
+                keys = command_keys(cmd) if cmd else []
+                if keys:
+                    c["commands"][keys[-1][0]] += 1
+                if len(c["examples"]) < examples:
+                    first = error_line(error_message(text))
+                    c["examples"].append({"date": fmt_day(t.ts or s.start), "session": s.id[:8], "tool": tool_family(tool),
+                                          "command": excerpt(cmd, 90) if cmd else "", "error": excerpt(first, chars)})
+    rows = []
+    for key, c in causes.items():
+        rows.append({"cause": key, "label": c["label"], "count": c["count"], "sessions": len(c["sessions"]),
+                     "tools": c["tools"].most_common(3), "commands": c["commands"].most_common(4),
+                     "examples": c["examples"]})
+    rows.sort(key=lambda r: -r["count"])
+    return rows
+
+
+ACTIVE_GAP = dt.timedelta(minutes=20)  # longer silence = the session was idle
+
+
+def active_intervals(s):
+    """Periods during which a session was being worked on: turn timestamps merged when less than 20 min apart."""
+    stamps = sorted({t.ts for t in s.turns if t.ts} | ({s.end} if s.end else set()))
+    out = []
+    for ts in stamps:
+        if out and ts - out[-1][1] <= ACTIVE_GAP:
+            out[-1][1] = ts
+        else:
+            out.append([ts, ts])
+    return [(a, b + dt.timedelta(minutes=2)) for a, b in out]
+
+
+def same_workspace(a, b):
+    if a.project and a.project == b.project:
+        return True
+    ca, cb = os.path.normcase(a.cwd or ""), os.path.normcase(b.cwd or "")
+    if not ca or not cb:
+        return False
+    return ca == cb or ca.startswith(cb.rstrip("\\/") + os.sep) or cb.startswith(ca.rstrip("\\/") + os.sep)
+
+
+def overlap_report(sessions, examples=5):
+    """Sessions active at the same time on the same project, and changes one session attributes to another.
+    Parallel sessions writing to the same folders see each other's uncommitted work without knowing whose it is."""
+    timed = [(s, active_intervals(s)) for s in sessions if s.client != "jetbrains-nitrite" and s.start]
+    timed = [(s, iv) for s, iv in timed if iv]
+    pairs, involved, days, per_project = [], set(), set(), Counter()
+    for i in range(len(timed)):
+        a, ia = timed[i]
+        for j in range(i + 1, len(timed)):
+            b, ib = timed[j]
+            if ia[-1][1] < ib[0][0] or ib[-1][1] < ia[0][0] or not same_workspace(a, b):
+                continue
+            minutes, first = 0.0, None
+            for x0, x1 in ia:
+                for y0, y1 in ib:
+                    lo, hi = max(x0, y0), min(x1, y1)
+                    if hi > lo:
+                        minutes += (hi - lo).total_seconds() / 60
+                        first = first or lo
+            if minutes >= 2:
+                pairs.append({"date": fmt_day(first), "project": a.project, "sessions": [a.id[:8], b.id[:8]],
+                              "minutes": int(minutes)})
+                involved |= {a.id, b.id}
+                days.add(fmt_day(first))
+                per_project[a.project or "?"] += 1
+    # Peak: most sessions active at once on one project.
+    peak, peak_day = 0, None
+    by_project = defaultdict(list)
+    for s, iv in timed:
+        for x0, x1 in iv:
+            by_project[s.project or "?"] += [(x0, 1), (x1, -1)]
+    for events in by_project.values():
+        n = 0
+        for ts, step in sorted(events, key=lambda e: (e[0], e[1])):
+            n += step
+            if n > peak:
+                peak, peak_day = n, fmt_day(ts)
+    foreign = [(s, f) for s in sessions for f in s.foreign]
+    pairs.sort(key=lambda p: -p["minutes"])
+    return {
+        "pairs": len(pairs), "sessions": len(involved), "days": len(days),
+        "peak": peak, "peak_day": peak_day, "by_project": per_project.most_common(5), "examples": pairs[:examples],
+        "foreign": {
+            "mentions": len(foreign), "sessions": len({s.id for s, _ in foreign}),
+            "in_overlapping": len({s.id for s, _ in foreign if s.id in involved}),
+            "examples": [{"date": fmt_day(ts or s.start), "session": s.id[:8], "project": s.project, "who": who, "text": text}
+                         for s, (ts, who, text) in sorted(foreign, key=lambda x: x[1][0] or NOW, reverse=True)[:examples]],
+        },
+    }
+
+
+def unscoped_report(unscoped, limit=8, chars=120):
+    """Sessions set aside by --project because their store does not say which folder they belong to."""
+    out = []
+    for s in sorted(unscoped, key=lambda x: x.start or NOW, reverse=True)[:limit]:
+        out.append({"session": s.id[:8], "source": s.source, "project": s.project, "date": fmt_day(s.start),
+                    "prompts": len(s.prompts()), "first": [excerpt(t.text, chars) for t in s.prompts()[:3]]})
+    return {"count": len(unscoped), "sessions": out}
+
+
+def missing_project_dirs(sessions, limit=3):
+    """Working directories recorded in the sessions that do not exist here (history copied from another
+    machine, moved repo): the repo's existing instructions, prompts and skills cannot be looked up there."""
+    missing = Counter()
+    for s in sessions:
+        for c in (s.cwds | {s.cwd}):
+            if c and not os.path.isdir(c):
+                missing[c] += 1
+    return [c for c, _n in missing.most_common(limit)], len(missing)
 
 
 CONFIRM_YES_RE = re.compile(r"^(oui|ouais|yes|yep|ok|okay|go|vas[- ]?y|fais[- ]?le|fais|continue|d'accord|parfait|top|"
@@ -1936,6 +2185,24 @@ def assistant_questions(sessions, examples=3):
     for e in stats.values():
         e["sessions"] = len(e["sessions"])
     return stats
+
+
+def declined_offers(sessions, examples=4):
+    """"non" answering a proposal of the assistant: not a correction, but a sign that it offered work
+    (often code) the user did not ask for."""
+    total, sess, ex = 0, set(), []
+    for s in sessions:
+        for i, t in enumerate(s.turns):
+            if "REFUS_PROPOSITION" not in t.flags:
+                continue
+            total += 1
+            sess.add(s.id)
+            if len(ex) < examples:
+                reply = (s.turns[i - 1].reply or "").strip().rstrip("*_` \n")
+                ex.append({"date": fmt_day(t.ts or s.start), "session": s.id[:8], "project": s.project,
+                           "question": excerpt(re.split(r"(?<=[.!?\n])\s+", reply)[-1], 110),
+                           "answer": excerpt(t.text, 90)})
+    return {"count": total, "sessions": len(sess), "examples": ex}
 
 
 def tool_usage(sessions, limit=10):
@@ -2023,7 +2290,8 @@ def grep_report(sessions, pattern, in_replies=False, limit=8, chars=150):
             " · du %s au %s" % (fmt_day(stamps[0]), fmt_day(stamps[-1])) if stamps else ""),
          "- par projet : " + ", ".join("%s (%d)" % kv for kv in Counter(s.project or "?" for s, *_ in hits).most_common(8)),
          "- par source : " + ", ".join("%s (%d)" % kv for kv in Counter(s.source for s, *_ in hits).most_common()),
-         "", "Exemples (les plus récents, une session chacun) :"]
+         "", "Exemples (les plus récents, une session chacun). Lis-les avant de citer le chiffre : un seul exemple hors "
+             "sujet veut dire que le motif est trop large, resserre-le et relance.", ""]
     shown = set()
     for s, i, t, text, m in sorted(hits, key=lambda h: h[2].ts or h[0].start or NOW, reverse=True):
         if s.id in shown:
@@ -2054,6 +2322,12 @@ def build_digest(sessions, sources, args):
         commands.update(s.commands)
         skills_used.update(s.skills)
     project_dirs = project_roots(sessions)
+    missing, n_missing = missing_project_dirs(sessions)
+    if missing:
+        WARNINGS.append("%d dossier(s) de projet enregistré(s) dans les sessions n'existent pas sur cette machine (ex. %s) : "
+                        "l'existant de ces dépôts (instructions, prompts, skills) n'a été cherché que dans le profil et "
+                        "dans --cwd (%s). Si ce n'est pas le dossier du dépôt, relancez avec `--cwd <dossier du dépôt>` ; "
+                        "à défaut, ne concluez pas que rien n'existe." % (n_missing, ", ".join(missing), args.cwd))
     return {
         "generated_at": NOW.isoformat(timespec="seconds"),
         "sources": sorted(sources),
@@ -2082,8 +2356,16 @@ def build_digest(sessions, sources, args):
         "guardrails": guardrail_report(sessions),
         "defects": defect_report(sessions),
         "assistant_questions": assistant_questions(sessions),
+        "declined_offers": declined_offers(sessions),
         "tool_errors": tool_error_report(sessions),
+        "tool_error_causes": tool_error_causes(sessions),
+        "overlaps": overlap_report(sessions),
+        # With --project they are set aside; without it they are counted but their requests are easy to miss.
+        "unscoped": unscoped_report(getattr(args, "unscoped", []) if args.project
+                                    else [s for s in sessions if unknown_project(s)]),
+        "unscoped_filtered": bool(args.project),
         "warnings": list(dict.fromkeys(WARNINGS)),
+        "missing_project_dirs": n_missing,
         "recurring_requests": clusters,
         "recurring_shell_commands": recurring_commands(sessions, args.excerpt_chars),
         "tool_usage": tool_usage(sessions),
@@ -2214,6 +2496,13 @@ def render_markdown(d):
                          % (label, e["questions"], e["sessions"], e["answered_yes"]))
                 for x in e["examples"]:
                     L.append("  - [%s · session %s] « %s » → « %s »" % (x["date"], x["session"], x["question"], x["answer"]))
+    dec = d.get("declined_offers") or {}
+    if dec.get("count"):
+        L.append("- « non » en réponse à une proposition de l'assistant : %d fois dans %d sessions. **Pas compté comme "
+                 "correction** (l'assistant n'avait encore rien fait de travers), mais souvent le signe qu'il propose "
+                 "du travail non demandé :" % (dec["count"], dec["sessions"]))
+        for x in dec["examples"]:
+            L.append("  - [%s · %s · session %s] « %s » → « %s »" % (x["date"], x["project"], x["session"], x["question"], x["answer"]))
     L.append("")
 
     L.append("## Demandes récurrentes (groupes de prompts similaires)")
@@ -2262,6 +2551,62 @@ def render_markdown(d):
             L.append("- %s : %d fois dans %d sessions · « %s »" % (r["tool"], r["count"], r["sessions"], r["example"]))
     L.append("")
 
+    L.append("## Coût côté assistant : erreurs d'outils par cause")
+    causes = d.get("tool_error_causes") or []
+    if not causes:
+        L.append("_Aucune erreur d'outil._")
+    else:
+        L.append("L'utilisateur ne voit pas ces échecs et ne s'en plaint pas : ils coûtent du temps et des tokens à chaque session. "
+                 "Une cause qui revient (environnement, dossier, syntaxe du shell, script qui échoue sans message) "
+                 "se corrige souvent une fois pour toutes, par une règle ou en réparant le script du projet.")
+        for r in causes:
+            L.append("- **%s** : %d erreurs dans %d sessions · outils : %s%s"
+                     % (r["label"], r["count"], r["sessions"], ", ".join("%s (%d)" % kv for kv in r["tools"]),
+                        " · commandes : " + ", ".join("`%s` (%d)" % kv for kv in r["commands"]) if r["commands"] else ""))
+            for x in r["examples"][:2]:
+                L.append("  - [%s · session %s · %s] %s« %s »" % (x["date"], x["session"], x["tool"],
+                                                                 "`%s` → " % x["command"] if x["command"] else "", x["error"]))
+    L.append("")
+
+    L.append("## Sessions en parallèle sur le même projet")
+    ov = d.get("overlaps") or {}
+    fo = ov.get("foreign") or {}
+    if not ov.get("pairs") and not fo.get("mentions"):
+        L.append("_Aucun chevauchement détecté._")
+    else:
+        L.append("Deux sessions actives en même temps dans les mêmes dossiers voient chacune les modifications non commitées "
+                 "de l'autre, sans savoir à qui elles sont : commits qui embarquent le travail d'une autre session, "
+                 "« c'est quoi ce fichier modifié ? », serveurs arrêtés par une autre session.")
+        L.append("- %d paires de sessions qui se chevauchent (≥ 2 min), %d sessions concernées, sur %d jours ; "
+                 "jusqu'à %d sessions actives en même temps%s"
+                 % (ov["pairs"], ov["sessions"], ov["days"], ov["peak"], " (le %s)" % ov["peak_day"] if ov["peak_day"] else ""))
+        if ov.get("by_project"):
+            L.append("- Par projet : " + ", ".join("%s (%d paires)" % kv for kv in ov["by_project"]))
+        for p in ov.get("examples", [])[:3]:
+            L.append("  - [%s · %s] sessions %s : %d min en commun" % (p["date"], p["project"], " et ".join(p["sessions"]), p["minutes"]))
+        if fo.get("mentions"):
+            L.append("- Modifications attribuées à une autre session ou à quelqu'un d'autre : %d mentions dans %d sessions "
+                     "(dont %d qui en chevauchent une autre)" % (fo["mentions"], fo["sessions"], fo["in_overlapping"]))
+            for x in fo["examples"]:
+                L.append("  - [%s · %s · session %s · %s] « %s »" % (x["date"], x["project"], x["session"], x["who"], x["text"]))
+    L.append("")
+
+    un = d.get("unscoped") or {}
+    if un.get("count"):
+        if d.get("unscoped_filtered"):
+            L.append("## Sessions sans projet identifié (écartées par --project)")
+            L.append("Le stockage ne dit pas à quel dossier elles appartiennent (fenêtre VS Code vide, ancienne base JetBrains). "
+                     "Vérifiez si elles concernent le projet analysé avant de les ignorer.")
+        else:
+            L.append("## Sessions sans projet identifié (comptées dans les chiffres)")
+            L.append("Le stockage ne dit pas à quel dossier elles appartiennent (fenêtre VS Code vide, ancienne base JetBrains). "
+                     "Leurs demandes sont souvent courtes et isolées : classez-les quand même (thème récurrent, ou "
+                     "question ponctuelle à mettre dans « ce qui ne mérite pas d'automatisation »).")
+        for x in un["sessions"]:
+            L.append("- [%s · %s · session %s · %d demandes] %s" % (x["date"], x["source"], x["session"], x["prompts"],
+                                                                     " / ".join("« %s »" % f for f in x["first"])))
+        L.append("")
+
     if d["memories"]:
         L.append("## Notes de mémoire des projets (les plus volumineuses d'abord)")
         L.append("Une note longue et qui grossit décrit souvent une procédure : sa place est peut-être dans un skill.")
@@ -2278,13 +2623,14 @@ def render_markdown(d):
     L.append("")
 
     L.append("## Déjà en place")
+    none = "aucun trouvé (non vérifié dans les dépôts introuvables, voir les limites)" if d.get("missing_project_dirs") else "aucun"
     L.append("- Commandes slash utilisées : " + (", ".join("/%s (%d)" % kv for kv in d["slash_commands_used"]) or "aucune"))
     L.append("- Skills invoqués : " + (", ".join("%s (%d)" % kv for kv in d["skills_used"]) or "aucun détecté"))
     L.append("- Skills disponibles (profil, plugins, projets analysés) : "
-             + (", ".join(s["name"] for s in d["existing_skills"]) or "aucun"))
+             + (", ".join(s["name"] for s in d["existing_skills"]) or none))
     L.append("- Commandes / prompt files définis : "
-             + (", ".join("%s (%s)" % (c["name"], c["location"]) for c in d["existing_commands"]) or "aucun"))
-    L.append("- Fichiers d'instructions (profil + projets analysés) : " + (", ".join(d["instruction_files"]) or "aucun"))
+             + (", ".join("%s (%s)" % (c["name"], c["location"]) for c in d["existing_commands"]) or none))
+    L.append("- Fichiers d'instructions (profil + projets analysés) : " + (", ".join(d["instruction_files"]) or none))
     L.append("")
     L.append("## Limites")
     L.append("- Heuristiques lexicales (FR/EN) : une correction peut être manquée ou mal détectée ; les tours ne disent pas *pourquoi* ça a tourné.")
@@ -2377,6 +2723,8 @@ def main(argv=None):
     ap.add_argument("--days", type=int, default=30, help="only sessions active in the last N days (0 = all)")
     ap.add_argument("--project", help="keep sessions whose project name or cwd contains this text")
     ap.add_argument("--exclude-session", action="append", help="session id prefix to ignore (repeatable)")
+    ap.add_argument("--exclude-project", action="append",
+                    help="ignore sessions whose project name or cwd contains this text, e.g. the audit's own folder (repeatable)")
     ap.add_argument("--format", default="md", choices=["md", "json"])
     ap.add_argument("--out", help="write the digest to this file instead of stdout")
     ap.add_argument("--show-session", metavar="ID_PREFIX",
@@ -2384,6 +2732,8 @@ def main(argv=None):
     ap.add_argument("--full", action="store_true", help="with --show-session: every turn, longer excerpts")
     ap.add_argument("--grep", metavar="REGEX", help="count and sample the requests matching a pattern (case-insensitive)")
     ap.add_argument("--grep-replies", action="store_true", help="with --grep: search the assistant's replies instead")
+    ap.add_argument("--grep-log", metavar="FILE",
+                    help="with --grep: also append the result to FILE, so every search behind a figure is kept")
     ap.add_argument("--episodes", type=int, default=12, help="friction episodes shown in the digest")
     ap.add_argument("--list-sources", action="store_true", help="show which history locations exist and exit")
     ap.add_argument("--top-sessions", type=int, default=10)
@@ -2420,6 +2770,11 @@ def main(argv=None):
         for s in selected:
             session_metrics(s, idf)
         text = grep_report(selected, args.grep, in_replies=args.grep_replies)
+        if args.grep_log:
+            os.makedirs(os.path.dirname(os.path.abspath(args.grep_log)), exist_ok=True)
+            with open(args.grep_log, "a", encoding="utf-8") as f:
+                f.write("%s\n\n(filtres : %s jours, projet=%s)\n\n---\n\n"
+                        % (text, args.days or "tous", args.project or "tous"))
     else:
         selected = select_sessions(sessions, args)
         if not selected:

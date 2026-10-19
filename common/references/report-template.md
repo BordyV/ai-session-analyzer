@@ -6,9 +6,10 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 # Audit de l'historique <Claude Code | GitHub Copilot> — <date de début> → <date de fin>
 
 ## En bref
+<Mêmes chiffres que le corps, avec des ratios plutôt que « toujours » ou « presque toujours ».>
 - <Verdict principal, ex. : « 2 automatisations valent le coup, 1 règle à ajouter, le reste ne mérite rien »>
-- <Le plus gros gisement de tours perdus, en une phrase>
-- <Ce qui fonctionne déjà bien (commandes ou skills existants utilisés)>
+- <Le plus gros gisement de tours perdus, en une phrase, ex. : « 17 des 39 questions « je commite ? » reçoivent un simple oui »>
+- <Ce qui fonctionne déjà bien (commandes ou skills existants utilisés). Si l'existant n'a pas pu être vérifié (dépôt introuvable), écris-le au lieu de « rien n'est en place ».>
 
 ## Chiffres clés
 | Sessions | Demandes | Tours médians / session | Sessions ≥ 8 tours | Sessions avec corrections |
@@ -17,7 +18,13 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 
 ## Là où ça tourne en rond
 <3 à 5 épisodes maximum, les plus coûteux. Pour chacun :>
-- **<Session, date, projet>** : <ce qui s'est passé, en une phrase>. Cause : <A–G, voir méthodologie>. Indice : « <extrait court> » ou <signal chiffré>.
+- **<Session, date, projet>** : <ce qui s'est passé, en une phrase>. Cause : <A–I, voir méthodologie>. Indice : « <extrait court> » ou <signal chiffré>.
+
+## Ce que l'assistant pourrait éviter de lui-même
+<Ce que l'utilisateur ne voit pas ou ne dit pas : erreurs d'outils récurrentes (cause I), sessions parallèles qui se marchent dessus (cause H). Une ligne par problème qui revient ; « rien de notable » si les sections du digest sont vides ou anecdotiques.>
+| Problème | Combien | Exemple | Remède |
+|---|---|---|---|
+| … | … erreurs dans … sessions | `<commande>` → « <erreur> » | <instruction, script à réparer, rien> |
 
 ## Tâches répétitives
 | Thème | Fréquence (sessions / jours) | Tours moyens | Ce qui se répète | Verdict |
@@ -28,7 +35,7 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 
 ### 1. <Créer un skill | Ajouter une règle | Prompt réutilisable | Hook / CI | Améliorer l'existant> : <nom>
 - **Preuves** : <occurrences, sessions, corrections typiques>
-- **Gain estimé** : <calcul en tours économisés par mois>
+- **Gain estimé** : <calcul en tours économisés par mois ; à défaut, erreurs ou appels d'outils évités par mois, jamais seulement « difficile à chiffrer »>
 - **Emplacement** : `<chemin exact>`
 - **Brouillon** : <prêt à copier, voir ci-dessous>
 
@@ -39,6 +46,7 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 
 ## Limites de l'analyse
 - <Période réellement couverte, sources lues et non lues, heuristiques>
+- <Méthode, telle qu'elle a vraiment été suivie : sessions ouvertes (ids), recherches lancées (motifs)>
 ```
 
 ## Brouillon de skill (quand la recommandation est « créer un skill »)

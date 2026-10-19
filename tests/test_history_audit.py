@@ -117,6 +117,37 @@ class CopilotTests(unittest.TestCase):
         self.assertEqual([c["name"] for c in self.d["existing_commands"]], ["/nouveau-endpoint"])
         self.assertTrue(any(p.endswith("copilot-instructions.md") for p in self.d["instruction_files"]))
 
+    def test_missing_project_dirs_are_flagged(self):
+        # The fixtures record /home/dev/billing-api: the repo is only found through --cwd, and the digest says so.
+        self.assertTrue(any("--cwd" in w and "billing-api" in w for w in self.d["warnings"]))
+
+    def test_project_filter_lists_unscoped_sessions(self):
+        code, out = run("--source", "copilot", "--project", "billing-api", "--format", "json")
+        self.assertEqual(code, 0)
+        un = json.loads(out)["unscoped"]
+        firsts = " ".join(" ".join(x["first"]) for x in un["sessions"])
+        self.assertEqual(un["count"], 2)  # VS Code empty window + old JetBrains store, neither tied to a folder
+        self.assertIn("pagination", firsts)
+        self.assertIn("@MockBean", firsts)
+
+    def test_unscoped_listed_without_project_filter(self):
+        un = self.d["unscoped"]
+        self.assertFalse(self.d["unscoped_filtered"])
+        self.assertIn("@MockBean", " ".join(" ".join(x["first"]) for x in un["sessions"]))
+
+    def test_unverified_existing_is_said(self):
+        argv = ["--source", "copilot"] + COMMON[:-1] + [os.path.join(FIXTURES, "vscode-user")]  # --cwd without the repo
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(ha.main(argv), 0)
+        out = buf.getvalue()  # nothing found, and the digest says it could not look where the repo was
+        self.assertIn("non vérifié dans les dépôts introuvables", out)
+
+    def test_tool_error_causes(self):
+        causes = {r["cause"]: r for r in self.d["tool_error_causes"]}
+        self.assertIn("mvn test", dict(causes["tests"]["commands"]))
+        self.assertEqual(causes["muet"]["count"], 2)  # VS Code "Command failed: exit code 1" on mvn verify
+
 
 class JetBrainsTests(unittest.TestCase):
     @classmethod
@@ -222,6 +253,15 @@ class ClaudeTests(unittest.TestCase):
         self.assertIn("1 occurrences", out)
         self.assertIn("réponses de l'assistant", out)
 
+    def test_grep_log_keeps_every_search(self):
+        log = os.path.join(tempfile.mkdtemp(), "work", "greps.md")
+        run("--source", "claude", "--grep", "release", "--grep-log", log)
+        run("--source", "claude", "--grep", "changelog", "--grep-log", log)
+        with open(log, encoding="utf-8") as f:
+            text = f.read()
+        self.assertIn("Motif « release »", text)
+        self.assertIn("Motif « changelog »", text)
+
 
 class DistTests(unittest.TestCase):
     """dist/ is committed so users can copy a skill as is: it must match the sources."""
@@ -250,6 +290,12 @@ class HelperTests(unittest.TestCase):
         self.assertEqual(keys("node -e 'const a = 1;\nconsole.log(a)'"), [])
         self.assertEqual(keys("mvn -q test -Dtest=Foo"), ["mvn test"])
         self.assertEqual(keys("git -C api status && git -C api push"), ["git push"])
+
+    def test_declined_offer_is_not_a_correction(self):
+        self.assertTrue(ha.declines_offer("Non pas de suite", "Je la développe sur ce modèle ?"))
+        self.assertTrue(ha.declines_offer("non mais stop", "Je l'ajoute au test ?"))
+        self.assertFalse(ha.declines_offer("non, utilise AssertJ", "Fait."))  # reacts to delivered work
+        self.assertFalse(ha.declines_offer("non je t'ai dit AssertJ", "Je lance les tests ?"))  # a real correction
 
     def test_corrections(self):
         self.assertTrue(ha.correction_label("non, utilise AssertJ"))
@@ -280,6 +326,40 @@ class HelperTests(unittest.TestCase):
         self.assertTrue(found("ça s'affiche pas"))
         self.assertFalse(found("en cas de récession du marché"))
         self.assertFalse(found("ça change pas"))
+
+    def test_error_causes(self):
+        cause = lambda tool, text: ha.error_cause(tool, text)[0]  # noqa: E731
+        self.assertEqual(cause("Bash", "Exit code 128\nfatal: not a git repository (or any of the parent directories)"), "dossier")
+        self.assertEqual(cause("Bash", "Exit code 127\n/usr/bin/bash: line 1: python: command not found"), "environnement")
+        self.assertEqual(cause("Bash", "Exit code 2\nbash: -c: line 3: unexpected EOF while looking for matching `''"), "syntaxe")
+        self.assertEqual(cause("Edit", "<tool_use_error>String to replace not found in file."), "edition")
+        self.assertEqual(cause("Grep", "Ripgrep search timed out after 20 seconds."), "delai")
+        self.assertEqual(cause("PowerShell", "Exit code 1"), "muet")
+        self.assertEqual(cause("PowerShell", "Exit code 1\nLines\nDone\n[ERROR] Tests run: 5, Failures: 1"), "tests")
+        self.assertEqual(cause("mcp__claude-in-chrome__computer", "Element is detached"), "externe")
+
+    def test_foreign_changes(self):
+        s = ha.Session("claude", "x", "x")
+        ha.note_foreign(s, None, "assistant", "`logo.py` contient des modifications qui ne viennent pas de moi.")
+        ha.note_foreign(s, None, "assistant", "C'est toi qui les as écrits, ou une autre session ?")
+        ha.note_foreign(s, None, "assistant", "**Ce que je n'ai pas fait** : relancer les tests.")
+        ha.note_foreign(s, None, "utilisateur", "on verra ça dans une autre session")
+        self.assertEqual(len(s.foreign), 2)
+
+    def test_overlaps(self):
+        def session(sid, project, start_min, minutes):
+            s = ha.Session("claude", sid, sid)
+            s.project = s.cwd = project
+            t0 = ha.NOW - ha.dt.timedelta(days=1) + ha.dt.timedelta(minutes=start_min)
+            for m in range(0, minutes + 1, 5):
+                s.turns.append(ha.Turn(t0 + ha.dt.timedelta(minutes=m), "x"))
+                s.touch(t0 + ha.dt.timedelta(minutes=m))
+            return s
+        a, b = session("a", "/p", 0, 60), session("b", "/p", 30, 60)
+        c, d = session("c", "/other", 0, 60), session("d", "/p", 200, 30)  # other project / later the same day
+        ov = ha.overlap_report([a, b, c, d])
+        self.assertEqual((ov["pairs"], ov["sessions"], ov["peak"]), (1, 2, 2))
+        self.assertEqual(ov["examples"][0]["minutes"], 32)
 
     def test_redaction(self):
         self.assertNotIn("ghp_", ha.excerpt("token ghp_abcdefghijklmnopqrstuvwxyz0123", 200))

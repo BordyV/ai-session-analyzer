@@ -8,11 +8,24 @@
       "files": [],
       "assertions": [
         "Le rapport s'appuie sur des chiffres tirés de l'historique réel (sessions, demandes ou tours)",
-        "Le rapport identifie le cycle commit / push / merge comme tâche récurrente",
+        "Le rapport identifie le cycle commit / push / merge comme tâche récurrente et le traite par une règle d'autonomie (CLAUDE.md) plutôt que par un skill dédié",
         "Le rapport tient compte des commandes existantes du projet (.claude/commands) au lieu de proposer de les recréer",
         "Chaque recommandation précise le mécanisme (skill, règle CLAUDE.md, commande, hook ou rien) et l'emplacement du fichier",
         "Le rapport fournit au moins un brouillon prêt à l'emploi (SKILL.md ou règle)",
         "Le rapport dit explicitement ce qui ne vaut pas le coup d'être automatisé",
+        "Le rapport exploite les appels d'outils, pas seulement le texte des demandes : il chiffre au moins un usage répété d'outil (actions Chrome par publication, code Unity exécuté par MCP et réécrit d'une session à l'autre…)",
+        "Le rapport s'appuie sur les notes de mémoire de projet qui décrivent déjà une procédure, au lieu de proposer de la réécrire de zéro",
+        "Le rapport chiffre les questions de confirmation posées par Claude (« je commite ? », « je pousse ? ») et combien ont reçu un simple « oui »",
+        "Chaque recommandation chiffre un gain estimé (tours ou demandes évités par mois)",
+        "Le rapport indique la période réellement couverte et la purge des transcripts (cleanupPeriodDays)",
+        "Les sessions personnelles hors travail (dépannage de Windows sur C:\\ : disque, BIOS, Miracast…) ne sont pas détaillées : au plus une catégorie",
+        "Le rapport se termine en proposant de mettre en œuvre la recommandation n° 1, sans l'avoir fait",
+        "Sobriété : au plus 5 sessions ouvertes avec --show-session, aucun script d'extraction écrit et aucun fichier de session (.jsonl, events.jsonl, chatSessions) lu directement",
+        "Le rapport relève au moins une erreur d'outil récurrente côté assistant (script de tests qui échoue sans dire pourquoi, recherches qui expirent, mauvais dossier courant, interpréteur introuvable…) et propose un remède",
+        "La réinitialisation du compte de test reçoit un verdict conforme aux critères de fréquence et de coût (script + commande), ou un « rien » justifié par un fait daté",
+        "Les chiffres clés sont identiques d'une section à l'autre, et le « En bref » ne dit pas plus que le corps (ratios, pas de « toujours » ou « presque toujours » pour un ratio partiel)",
+        "Chaque chiffre tiré d'un --grep est accompagné de son motif, et son étiquette décrit exactement ce que le motif compte",
+        "Les recherches --grep sont conservées (--grep-log), et chaque chiffre --grep cité vient d'un motif dont les exemples sont dans le sujet (pas de faux positif évident)",
         "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
       ]
     },
@@ -27,6 +40,15 @@
         "Pour chaque épisode cité, une cause racine est nommée (contexte manquant, procédure manuelle, environnement, demande floue…)",
         "Le rapport distingue la friction évitable du travail exploratoire normal",
         "Les remèdes proposés sont concrets (mécanisme, emplacement et contenu)",
+        "Au moins un « non » précis qui répond à une proposition de Claude est écarté des corrections et nommé comme tel (ex. « Non pas de suite » de 67bcbc91, « Non mais stop » de 772ff326)",
+        "Le rapport chiffre les questions de confirmation posées par Claude et combien ont reçu un simple « oui »",
+        "Le rapport tient compte de la structure réelle du projet (plusieurs dépôts, branches principales différentes…) dans ses remèdes",
+        "Sobriété : au plus 5 sessions ouvertes avec --show-session, aucun script d'extraction écrit et aucun fichier de session (.jsonl, events.jsonl, chatSessions) lu directement",
+        "Le rapport relève les sessions parallèles sur le projet (sessions qui se chevauchent, modifications « qui ne viennent pas de moi ») et propose un remède (une seule session de code à la fois, worktree par chantier…)",
+        "Le rapport relève au moins une erreur d'outil récurrente côté assistant (script de tests qui échoue sans dire pourquoi, recherches qui expirent, mauvais dossier courant, interpréteur introuvable…) et propose un remède",
+        "Les chiffres clés sont identiques d'une section à l'autre, et le « En bref » ne dit pas plus que le corps (ratios, pas de « toujours » ou « presque toujours » pour un ratio partiel)",
+        "Chaque chiffre tiré d'un --grep est accompagné de son motif, et son étiquette décrit exactement ce que le motif compte",
+        "Les recherches --grep sont conservées (--grep-log), et chaque chiffre --grep cité vient d'un motif dont les exemples sont dans le sujet (pas de faux positif évident)",
         "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
       ]
     },
@@ -38,9 +60,17 @@
       "assertions": [
         "La réponse vérifie l'hypothèse dans l'historique avec des chiffres (demandes ou sessions commit/push/merge)",
         "La réponse s'appuie aussi sur les commandes git réellement exécutées (git commit / push / merge)",
-        "La réponse donne un verdict clair (oui / non et mécanisme retenu)",
+        "La réponse donne un verdict clair, appuyé sur le coût mesuré : les questions de confirmation de Claude sont traitées par une règle d'autonomie, et un skill n'est recommandé que s'il supprime des tours chiffrés",
         "La réponse examine au moins une alternative au skill (règle CLAUDE.md, commande existante, hook, rien)",
         "Un brouillon prêt à l'emploi est fourni pour le mécanisme recommandé, reprenant les formulations réelles de l'utilisateur",
+        "La réponse chiffre les questions de confirmation posées par Claude (« je commite ? », « je pousse ? », « je fusionne ? ») et combien ont reçu un simple « oui »",
+        "Le brouillon donne les branches principales exactes de charting3d : api/api et Charting3D sur main, ihm/ihmCharting3D sur master",
+        "Au moins un faux positif sémantique (« commit et programme » la vidéo, « merge la vidéo part 3 »…) est retiré du décompte ou chiffré à part, pas seulement signalé dans les limites",
+        "La réponse chiffre le gain attendu (tours évités par mois)",
+        "Sobriété : au plus 5 sessions ouvertes avec --show-session, aucun script d'extraction écrit et aucun fichier de session (.jsonl, events.jsonl, chatSessions) lu directement",
+        "Les chiffres clés sont identiques d'une section à l'autre, et le « En bref » ne dit pas plus que le corps (ratios, pas de « toujours » ou « presque toujours » pour un ratio partiel)",
+        "Chaque chiffre tiré d'un --grep est accompagné de son motif, et son étiquette décrit exactement ce que le motif compte",
+        "Les recherches --grep sont conservées (--grep-log), et chaque chiffre --grep cité vient d'un motif dont les exemples sont dans le sujet (pas de faux positif évident)",
         "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
       ]
     }

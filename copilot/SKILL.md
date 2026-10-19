@@ -46,6 +46,7 @@ python "<dossier du skill>/scripts/history_audit.py" --source copilot --days 30 
 - Sous Windows, utilise `python` ou `py` ; sous macOS et Linux, `python3`.
 - Écris le digest hors du dépôt (dossier temporaire), pour ne pas le committer par erreur.
 - Si le digest est vide, lance `--list-sources`, puis élargis avec `--days 0`. Si VS Code est installé à un endroit inhabituel, passe `--vscode-user-dir <chemin du dossier User>`.
+- Si tu connais le dossier du dépôt (l'utilisateur te l'a donné, ou tu y travailles), passe `--cwd <dossier du dépôt>` : c'est là que le script cherche les instructions, prompt files et skills déjà en place. Si les limites du digest signalent des dossiers de projet introuvables, l'existant n'a pas été vérifié : ne conclus pas que rien n'existe.
 - La conversation d'audit en cours fait partie de l'historique : ignore-la dans ta lecture.
 
 ### 3. Lire, puis vérifier sans tout relire
@@ -54,13 +55,22 @@ Le digest contient déjà de quoi juger :
 - les garde-fous tapés par l'utilisateur (« sans coder », « ne fais pas le build », fautes de frappe comprises) ;
 - les défauts qu'il a signalés après une livraison (« ça dépasse », « ne s'affiche pas ») ;
 - les questions de confirmation posées par l'assistant (« je lance les tests ? » suivi de « oui ») ;
+- les « non » qui répondent à une proposition de l'assistant, comptés à part et non comme des corrections ;
 - les outils les plus utilisés et leurs erreurs les plus fréquentes ;
+- le coût côté assistant : les erreurs d'outils regroupées par cause (mauvais dossier, interpréteur introuvable, syntaxe du shell, commande qui échoue sans message…) ;
+- les sessions actives en même temps sur le même projet, et les modifications qu'une session attribue à une autre ;
+- avec `--project`, les sessions sans projet identifié (fenêtre VS Code vide, ancienne base JetBrains), listées à part : regarde si elles concernent le dépôt ;
 - les commandes répétées.
 
-Lis-le, puis `references/methodology.md` (sections 2 à 4). Pour chaque épisode, nomme la cause racine (A à G) : c'est elle qui détermine le remède, pas le nombre de tours.
+Lis-le, puis `references/methodology.md` (sections 2 à 4). Pour chaque épisode, nomme la cause racine (A à I) : c'est elle qui détermine le remède, pas le nombre de tours.
+
+Ne te limite pas aux épisodes de friction : ils ne montrent que ce que l'utilisateur a dit. Les sections « Coût côté assistant » et « Sessions en parallèle » révèlent ce qu'il ne voit pas (causes H et I). Quand tu cites une demande récurrente, montre ses variantes de formulation réelles plutôt que de dire qu'elle est « toujours la même ».
 
 Ensuite, vérifie au plus juste :
 - **Une hypothèse** (« je demande souvent X ? ») : `--grep "motif"`, ou `--grep "motif" --grep-replies` pour chercher dans les réponses de Copilot. Une commande donne les occurrences, les sessions, les jours et des exemples.
+  - Budget : 8 recherches au plus. Réserve-les aux chiffres qui fondent une recommandation ou un verdict « rien » / « sous le seuil » ; pour le reste (fréquences secondaires du tableau), reprends les chiffres du digest ou écris « non compté ».
+  - Ajoute toujours `--grep-log "<dossier temporaire>/greps.md"` : chaque recherche est conservée, avec son motif et ses exemples.
+  - Lis les exemples avant de citer le chiffre. Un exemple hors sujet (« prendre en compte » pour un compte de test, « le like sur tiktok » pour une publication) veut dire que le motif est trop large : resserre-le (mots plus précis, noms propres, verbes d'action) et relance. Ne cite que le chiffre du motif final, qui ne ramène plus de faux positif.
 - **Un épisode ambigu** : `--show-session <id>` affiche une vue compacte (tours signalés et leur contexte). Ouvre **5 sessions au maximum**, et seulement si le digest ne permet pas de nommer la cause. Réserve `--full` aux cas exceptionnels.
 - **N'écris pas tes propres scripts d'extraction et ne lis pas les fichiers de session directement.** Si une information manque au digest, signale-le dans les limites du rapport.
 
@@ -86,7 +96,13 @@ Pour distinguer instruction et skill : si la correction tient en une phrase (« 
 Pour choisir entre une portée personnelle et une portée équipe : si la répétition vient de conventions du dépôt, la solution va dans `.github/`, afin que toute l'équipe en profite. Si elle vient des habitudes de l'utilisateur, elle va dans `~/.copilot/`.
 
 ### 5. Rendre le rapport
-Suis `references/report-template.md`. Pour chaque skill recommandé, fournis un brouillon de `SKILL.md` dont la `description` reprend les formulations réelles relevées dans l'historique.
+Suis `references/report-template.md`. Pour chaque skill recommandé, fournis un brouillon de `SKILL.md` dont la `description` reprend les formulations réelles relevées dans l'historique. Chaque recommandation donne un emplacement de fichier et un gain chiffré.
+
+Avant de rendre le rapport, relis-le avec la section 6 de la méthodologie :
+- un même chiffre est identique dans toutes les sections, avec un périmètre annoncé. Préfère les chiffres du digest ; pour un chiffre tiré de `--grep`, cite le motif ;
+- le « En bref » ne dit pas plus que le corps : des ratios, pas « toujours » ni « à chaque fois » ; une hypothèse reste présentée comme une hypothèse ; le nombre de recommandations et de thèmes écartés correspond aux sections ;
+- un thème n'est classé « sous le seuil » qu'après un `--grep` de vérification ;
+- les limites décrivent la méthode réellement suivie (sessions ouvertes, recherches).
 
 Respecte la confidentialité : courts extraits uniquement, aucun secret, aucun nom de client, et les conversations hors travail résumées en une catégorie.
 
@@ -100,6 +116,8 @@ Termine en proposant de créer la recommandation n° 1. Si le plugin `skill-crea
 | `--jetbrains-diagnose` | Décrit les bases JetBrains trouvées (structure + 3 courts extraits ; `--no-excerpts` pour aucun texte) |
 | `--days N` | Sessions actives dans les N derniers jours (`0` = tout) |
 | `--project texte` | Filtre sur le nom ou le chemin du projet |
+| `--exclude-project texte` | Ignore les sessions dont le nom de projet ou le chemin contient ce texte (ex. `billing-api`) |
+| `--cwd dossier` | Dossier du dépôt où chercher l'existant (instructions, prompt files, skills) |
 | `--grep "motif"` | Compte et illustre les demandes qui correspondent (`--grep-replies` : dans les réponses) |
 | `--show-session id` | Vue compacte d'une session (`--full` : tous les tours) |
 | `--format json` | Sortie structurée |
