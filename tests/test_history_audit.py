@@ -263,22 +263,42 @@ class ClaudeTests(unittest.TestCase):
         self.assertIn("Motif « changelog »", text)
 
 
-class DistTests(unittest.TestCase):
-    """dist/ is committed so users can copy a skill as is: it must match the sources."""
+class BuildTests(unittest.TestCase):
+    """dist/ is generated (locally or by the release workflow): build into a temp dir and check the result."""
 
-    def test_dist_is_up_to_date(self):
-        root = os.path.join(HERE, "..")
-        for platform, name in (("claude", "claude-session-analyzer"), ("copilot", "copilot-session-analyzer")):
-            expected = {"SKILL.md": os.path.join(root, platform, "SKILL.md")}
+    @classmethod
+    def setUpClass(cls):
+        sys.path.insert(0, os.path.join(HERE, ".."))
+        import build
+        cls.build = build
+        cls._dist = build.DIST
+        build.DIST = tempfile.mkdtemp(prefix="skills_dist_")
+        cls.names = [build.build(p)[0] for p in sorted(build.SKILLS)]
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.build.DIST = cls._dist
+
+    def test_built_skills_are_valid_and_self_contained(self):
+        for name in self.names:
+            out = os.path.join(self.build.DIST, name)
+            self.assertEqual(self.build.validate(out, name), [])
             for sub in ("scripts", "references"):
-                for f in os.listdir(os.path.join(root, "common", sub)):
+                for f in os.listdir(os.path.join(HERE, "..", "common", sub)):
                     if not f.endswith(".pyc") and f != "__pycache__":
-                        expected["%s/%s" % (sub, f)] = os.path.join(root, "common", sub, f)
-            for rel, src in expected.items():
-                built = os.path.join(root, "dist", name, rel)
-                with open(src, "rb") as a, open(built, "rb") as b:
-                    self.assertEqual(a.read().replace(b"\r\n", b"\n"), b.read().replace(b"\r\n", b"\n"),
-                                     "dist/%s/%s est périmé : lance `python build.py`" % (name, rel))
+                        self.assertTrue(os.path.isfile(os.path.join(out, sub, f)), "%s/%s/%s" % (name, sub, f))
+            self.assertFalse(os.path.exists(os.path.join(out, "evals")))
+
+    def test_package_keeps_skill_folders(self):
+        import zipfile
+        names = self.names
+        path = os.path.join(tempfile.mkdtemp(), "bundle.zip")
+        self.build.zip_skills(path, names)
+        listed = zipfile.ZipFile(path).namelist()
+        for name in names:
+            self.assertIn(name + "/SKILL.md", listed)
+            self.assertIn(name + "/scripts/history_audit.py", listed)
+        self.assertFalse([n for n in listed if n.endswith(".pyc") or "\\" in n])
 
 
 class HelperTests(unittest.TestCase):
