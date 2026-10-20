@@ -21,7 +21,7 @@ copilot/SKILL.md              ← spécifique : où est l'historique, mécanisme
 claude/evals/, copilot/evals/ cas de test pour skill-creator
 tests/                        données fictives + tests de non-régression du script
 build.py                      assemble dist/<skill>/ (SKILL.md + common/), valide, installe
-dist/                         généré par build.py et versionné : c'est ce qu'on distribue (ne pas modifier à la main)
+dist/                         généré par build.py, non versionné (la pipeline de release le construit et le zippe)
 ```
 
 Un skill installé doit être autonome. `build.py` recopie donc `common/` dans chacun d'eux. Corrige toujours les fichiers sources (`common/`, `claude/`, `copilot/`), puis relance la construction.
@@ -38,16 +38,31 @@ Les noms sont distincts parce que Copilot lit aussi `~/.claude/skills/`. Si les 
 
 ## Construire et installer
 
-Sans rien construire : copie `dist/claude-session-analyzer/` dans `~/.claude/skills/` (ou `.claude/skills/` d'un projet), et `dist/copilot-session-analyzer/` dans `~/.copilot/skills/` (ou `.github/skills/` d'un dépôt). L'outil détecte le skill tout seul.
+Sans rien construire : télécharge le zip de la [dernière Release](https://github.com/BordyV/ai-session-analyzer/releases/latest) et dézippe-le dans `~/.claude/skills/` (ou `.claude/skills/` d'un projet) pour Claude, dans `~/.copilot/skills/` (ou `.github/skills/` d'un dépôt) pour Copilot. L'outil détecte le skill tout seul.
 
-Après une modification des sources, relance `python build.py` : un test vérifie que `dist/` est à jour.
+Depuis un clone, `python build.py` (bibliothèque standard uniquement) génère `dist/`, qui n'est pas versionné.
 
 ```bash
 python build.py                          # construit et valide dist/
 python build.py --install                # + ~/.claude/skills et ~/.copilot/skills
 python build.py --install-repo ../mon-depot  # + .claude/skills et .github/skills du dépôt
 python build.py --only copilot --install # une seule plateforme
+python build.py --package                # + zips de livraison dans release/ (version = git describe)
 ```
+
+### Livraison
+
+`python build.py --package [VERSION]` zippe `dist/` dans `release/` (non versionné) :
+
+| Archive | Contenu |
+|---|---|
+| `claude-session-analyzer-<version>.zip` | le skill Claude Code |
+| `copilot-session-analyzer-<version>.zip` | le skill Copilot |
+| `ai-session-analyzer-<version>.zip` | les deux |
+
+Chaque archive garde le dossier du skill à sa racine : on la dézippe telle quelle dans `~/.claude/skills/`, `~/.copilot/skills/`, `.claude/skills/` ou `.github/skills/`.
+
+Pousser un tag `v*` (`git tag v1.0.0 && git push origin v1.0.0`) lance `.github/workflows/release.yml` : tests, génération de `dist/`, puis publication d'une Release GitHub avec les trois archives. Le workflow peut aussi être lancé à la main (onglet Actions) : les zips sont alors joints au run, sans Release.
 
 ## Utiliser
 
