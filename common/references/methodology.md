@@ -88,7 +88,7 @@ Quatre critères, à évaluer sur la période analysée :
 | La règle ne concerne qu'un type de fichier ou un dossier | **Instruction ciblée** |
 | Procédure multi-étapes, fréquente, stable, avec du savoir spécifique | **Skill** (avec script pour les étapes déterministes) |
 | Même demande de départ, sans procédure ni ressources | **Prompt réutilisable / commande** |
-| Quelque chose doit se produire *à chaque fois*, sans dépendre de la mémoire de l'assistant (formater, bloquer une commande, lancer un contrôle) | **Automatisation déclenchée** (hook, CI) |
+| Quelque chose doit se produire *à chaque fois*, sans dépendre de la mémoire de l'assistant (formater, bloquer une commande, lancer un contrôle) | **Automatisation déclenchée** (hook, contrôle automatisé) |
 | Besoin d'un rôle isolé, avec ses propres outils et son propre contexte | **Agent personnalisé** |
 | L'assistant n'a pas accès à un système externe dont il a besoin | **Serveur MCP** |
 | Une commande ou un skill existe déjà mais est insuffisant ou oublié | **Améliorer ou faire connaître l'existant** |

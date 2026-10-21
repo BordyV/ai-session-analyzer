@@ -86,7 +86,7 @@ Applique la matrice de `references/methodology.md`, puis traduis chaque mécanis
 | Instruction ciblée | Fichier d'instructions par chemin | `.github/instructions/<nom>.instructions.md` avec `applyTo: "**/*.java"` dans l'en-tête |
 | Skill | Agent skill | `.github/skills/<nom>/SKILL.md` (équipe, versionné) ou `~/.copilot/skills/<nom>/SKILL.md` (perso). Le `name` doit être identique au nom du dossier. |
 | Prompt réutilisable | Prompt file | `.github/prompts/<nom>.prompt.md`, invoqué par `/<nom>` dans VS Code |
-| Automatisation déclenchée | Hook, ou CI | `.github/hooks/*.json` (`preToolUse`…, pour la CLI et l'agent) ; GitHub Actions pour ce qui doit être garanti sur chaque PR |
+| Automatisation déclenchée | Hook, ou contrôle automatisé | `.github/hooks/*.json` (`preToolUse`…, pour la CLI et l'agent) ; un contrôle automatisé sur chaque PR pour ce qui doit être garanti |
 | Agent personnalisé | Custom agent | `.github/agents/<nom>.agent.md` |
 | Accès externe | Serveur MCP | `.vscode/mcp.json` (VS Code) ou configuration MCP de la CLI (`/mcp`) |
 

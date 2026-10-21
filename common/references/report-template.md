@@ -33,7 +33,7 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 
 ## Recommandations, par priorité
 
-### 1. <Créer un skill | Ajouter une règle | Prompt réutilisable | Hook / CI | Améliorer l'existant> : <nom>
+### 1. <Créer un skill | Ajouter une règle | Prompt réutilisable | Hook / contrôle automatisé | Améliorer l'existant> : <nom>
 - **Preuves** : <occurrences, sessions, corrections typiques>
 - **Gain estimé** : <calcul en tours économisés par mois ; à défaut, erreurs ou appels d'outils évités par mois, jamais seulement « difficile à chiffrer »>
 - **Emplacement** : `<chemin exact>`
