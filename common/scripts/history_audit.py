@@ -21,7 +21,7 @@ The script does the counting; the agent does the judgment. It produces a compact
 
 Examples:
   python history_audit.py --list-sources
-  python history_audit.py --source claude --days 30
+  python history_audit.py --source claude --days 30   # last 30 days only (default: all)
   python history_audit.py --source copilot --days 14 --project my-repo --out digest.md
   python history_audit.py --source claude --show-session 3f2a
   python history_audit.py --source all --format json --out digest.json
@@ -2332,6 +2332,9 @@ def build_digest(sessions, sources, args):
         "generated_at": NOW.isoformat(timespec="seconds"),
         "sources": sorted(sources),
         "filters": {"days": args.days, "project": args.project},
+        # --cwd only says where to look for existing skills / instructions: it is not the scope of the audit.
+        "existing_lookup": {"cwd": args.cwd, "cwd_default": getattr(args, "cwd_default", False),
+                            "cwd_project": project_name(args.cwd)},
         "overview": {
             "sessions": len(sessions),
             "prompts": sum(s.metrics["prompts"] for s in sessions),
@@ -2344,6 +2347,7 @@ def build_digest(sessions, sources, args):
             "by_client": dict(Counter(s.client for s in sessions)),
             "nitrite_sessions": sum(1 for s in sessions if s.client == "jetbrains-nitrite"),
             "by_project": dict(Counter(s.project or "?" for s in sessions).most_common(12)),
+            "projects": len({s.project or "?" for s in sessions}),
         },
         "high_friction_sessions": [
             dict(id=s.id, short_id=s.id[:8], source=s.source, project=s.project, date=fmt_day(s.start),
@@ -2422,7 +2426,14 @@ def render_markdown(d):
     L.append("- Requêtes utilisateur (prompts) : **%d**" % o["prompts"])
     L.append("- Tours par session (médiane) : **%d** · sessions ≥ 8 tours : **%d** · sessions avec au moins une correction : **%d**"
              % (o["median_rounds"], o["sessions_8plus_rounds"], o["sessions_with_corrections"]))
-    L.append("- Projets : " + ", ".join("%s (%d)" % kv for kv in o["by_project"].items()))
+    others = o.get("projects", len(o["by_project"])) - len(o["by_project"])
+    rest = sum(o["by_project"].values())
+    L.append("- Projets (**%d**) : " % o.get("projects", len(o["by_project"]))
+             + ", ".join("%s (%d)" % kv for kv in o["by_project"].items())
+             + (" + %d autres (%d sessions)" % (others, o["sessions"] - rest) if others > 0 else ""))
+    scope = ("projet=%s" % d["filters"]["project"]) if d["filters"]["project"] else "tous les projets ci-dessus"
+    L.append("- Périmètre de l'audit : **%s**. Le dossier `--cwd` ne sert qu'à chercher l'existant (section « Déjà en place ») "
+             "et ne restreint pas ce périmètre." % scope)
     L.append("")
 
     L.append("## Sessions à forte friction (là où ça a tourné en rond)")
@@ -2631,6 +2642,11 @@ def render_markdown(d):
     L.append("- Commandes / prompt files définis : "
              + (", ".join("%s (%s)" % (c["name"], c["location"]) for c in d["existing_commands"]) or none))
     L.append("- Fichiers d'instructions (profil + projets analysés) : " + (", ".join(d["instruction_files"]) or none))
+    lk = d.get("existing_lookup")
+    if lk:
+        L.append("- Dossier `--cwd` fouillé en plus du profil et des projets analysés : %s (%s). Il sert à trouver l'existant, "
+                 "pas à choisir les projets audités." % (lk["cwd"], "dossier courant, par défaut" if lk["cwd_default"]
+                                                         else "passé explicitement"))
     L.append("")
     L.append("## Limites")
     L.append("- Heuristiques lexicales (FR/EN) : une correction peut être manquée ou mal détectée ; les tours ne disent pas *pourquoi* ça a tourné.")
@@ -2720,7 +2736,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Audit local Claude Code / GitHub Copilot chat history.")
     ap.add_argument("--source", default="all", choices=sorted(SOURCE_ALIASES),
                     help="claude, copilot (= copilot-cli + vscode), copilot-cli, vscode, all")
-    ap.add_argument("--days", type=int, default=30, help="only sessions active in the last N days (0 = all)")
+    ap.add_argument("--days", type=int, default=0, help="only sessions active in the last N days (default 0 = all)")
     ap.add_argument("--project", help="keep sessions whose project name or cwd contains this text")
     ap.add_argument("--exclude-session", action="append", help="session id prefix to ignore (repeatable)")
     ap.add_argument("--exclude-project", action="append",
@@ -2748,8 +2764,11 @@ def main(argv=None):
     ap.add_argument("--jetbrains-diagnose", action="store_true",
                     help="describe the JetBrains Copilot stores found (structure, plus 3 short excerpts per base)")
     ap.add_argument("--no-excerpts", action="store_true", help="with --jetbrains-diagnose: print no prompt text at all")
-    ap.add_argument("--cwd", default=os.getcwd(), help="project directory used to look for skills / instruction files")
+    ap.add_argument("--cwd", help="project directory used to look for skills / instruction files (default: current "
+                                   "directory). It never narrows the sessions analysed: use --project for that")
     args = ap.parse_args(argv)
+    args.cwd_default = not args.cwd
+    args.cwd = args.cwd or os.getcwd()
 
     if args.list_sources:
         print(list_sources(args))

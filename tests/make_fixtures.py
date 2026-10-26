@@ -8,8 +8,9 @@ Creates:
   <out>/copilot-home/session-store.db                                    Copilot CLI session store (fallback)
   <out>/vscode-user/workspaceStorage/<hash>/{workspace.json,chatSessions/*}  VS Code Copilot Chat
   <out>/repo/.github/...                                                 a repo with instructions + a prompt file
+  <out>/copilot-home-multi/session-state/...                             Copilot CLI history over several projects
 
-Timestamps are relative to "now" so the default --days 30 window always matches.
+Timestamps are relative to "now" so a --days 30 window always matches.
 Scenario: a Java team on `billing-api` keeps asking for the same JUnit tests and REST endpoints,
 corrects Copilot about the same conventions (AssertJ, @DisplayName, RFC 7807), and loops on `mvn test`.
 """
@@ -76,9 +77,9 @@ CLI_SESSIONS = [
 ]
 
 
-def cli_events(sess):
+def cli_events(sess, project="billing-api"):
     ev = [{"type": "session.start", "timestamp": iso(sess["days"]),
-           "data": {"context": {"cwd": "/home/dev/billing-api", "branch": "main", "repository": "acme/billing-api"}}}]
+           "data": {"context": {"cwd": "/home/dev/" + project, "branch": "main", "repository": "acme/" + project}}}]
     minute = 1
     for prompt, tools in sess["turns"]:
         ev.append({"type": "user.message", "timestamp": iso(sess["days"], minute), "data": {"content": prompt}})
@@ -160,6 +161,59 @@ def build_cli(root):
                 (CLI_SESSIONS[0]["id"], "/home/dev/billing-api", "acme/billing-api", "main", "dup", iso(18), iso(18), "cli"))
     con.commit()
     con.close()
+
+
+# Global audit: the same user also works on two batch projects and an analysis tool. Launched from billing-api,
+# a "since the beginning" audit must still see the batch theme, which spans two repositories.
+MULTI_SESSIONS = [
+    ("batch-exports", {
+        "id": "7a000001-0101-4000-8000-000000000101", "days": 22, "summary": "Job export comptable",
+        "turns": [
+            ("écris le job batch d'export comptable : reader JDBC, processor, writer CSV, en chunks de 500", []),
+            ("non, il faut une skip policy et la reprise sur erreur, comme pour les autres batchs", [("edit", None, False)]),
+            ("et le paramètre de date d'arrêté passé en JobParameter, pas en dur", [("edit", None, False)]),
+        ],
+    }),
+    ("batch-exports", {
+        "id": "7a000002-0102-4000-8000-000000000102", "days": 9, "summary": "Job export clients",
+        "turns": [
+            ("écris le job batch d'export des clients : reader JDBC, writer CSV, en chunks", []),
+            ("tu as encore oublié la skip policy et la reprise sur erreur", [("edit", None, False)]),
+        ],
+    }),
+    ("batch-relances", {
+        "id": "7a000003-0103-4000-8000-000000000103", "days": 15, "summary": "Job relances impayés",
+        "turns": [
+            ("écris le job batch de relance des impayés : reader JDBC, processor, writer vers la file d'envoi, en chunks", []),
+            ("non, ajoute la skip policy et la reprise sur erreur comme d'habitude", [("edit", None, False)]),
+            ("la date d'arrêté doit venir des JobParameters", [("edit", None, False)]),
+        ],
+    }),
+    ("batch-relances", {
+        "id": "7a000004-0104-4000-8000-000000000104", "days": 3, "summary": "Job purge relances",
+        "turns": [
+            ("écris le job batch de purge des relances anciennes, en chunks", []),
+            ("il manque la skip policy et la reprise sur erreur", [("edit", None, False)]),
+        ],
+    }),
+    ("log-analyzer", {
+        "id": "7a000005-0105-4000-8000-000000000105", "days": 12, "summary": "Analyse des logs",
+        "turns": [
+            ("analyse ce fichier de logs et sors les 10 erreurs les plus fréquentes", []),
+        ],
+    }),
+]
+
+
+def build_multi(root):
+    """A Copilot CLI home spread over several projects, for global (all projects) audits."""
+    home = os.path.join(root, "copilot-home-multi")
+    for project, sess in [("billing-api", x) for x in CLI_SESSIONS] + MULTI_SESSIONS:
+        d = os.path.join(home, "session-state", sess["id"])
+        write(os.path.join(d, "events.jsonl"), cli_events(sess, project))
+        write(os.path.join(d, "workspace.yaml"),
+              "cwd: /home/dev/%s\nrepository: acme/%s\nbranch: main\nsummary: %s\ncreated_at: %s\n"
+              % (project, project, sess["summary"], iso(sess["days"])))
 
 
 # --------------------------------------------------------------------------- VS Code
@@ -398,6 +452,7 @@ def main():
     build_claude(out)
     build_jetbrains(out)
     build_repo(out)
+    build_multi(out)
     print("Fixtures written to %s" % os.path.abspath(out))
     print("Try: python common/scripts/history_audit.py --source copilot --copilot-home %s --vscode-user-dir %s "
           "--jetbrains-dir %s --cwd %s" % (os.path.join(out, "copilot-home"), os.path.join(out, "vscode-user"),

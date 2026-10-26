@@ -33,20 +33,31 @@ Ce skill va plus loin : il couvre plusieurs projets, inclut VS Code, chiffre les
 ## Déroulé
 
 ### 1. Cadrer, sans sur-questionner
-Par défaut : les 30 derniers jours, toutes les sources présentes (CLI, VS Code, JetBrains) et tous les projets. Si l'utilisateur parle de « ce dépôt », filtre avec `--project <nom du dossier>`. Ne pose une question que si la demande est vraiment ambiguë.
+Par défaut : toutes les sources présentes (CLI, VS Code, JetBrains) et tous les projets. Pose une seule question de cadrage, et seulement sur ce qui manque :
+
+- **La période.** Si l'utilisateur ne l'a pas donnée, demande-lui combien de temps analyser, en proposant : tout l'historique (conseillé pour un premier audit), le dernier mois, ou une autre durée. Traduis sa réponse en `--days N` (`0` = tout). « Depuis le début » ou « sur tout mon historique » répondent déjà à la question, comme « ce mois-ci » ou « mes 10 derniers jours ».
+- **Le périmètre**, seulement si la demande hésite vraiment entre tous les projets et un seul.
+
+Si tu ne peux pas poser de question (exécution non interactive), prends tout l'historique et annonce ce choix en tête du rapport.
+
+Distingue deux types d'audit, et annonce le type choisi en tête du rapport :
+- **Audit global** : c'est le cas par défaut, et en particulier quand l'utilisateur dit « depuis le début », « en général » ou « sur tout mon historique ». Le rapport couvre tous les projets du digest avant toute recommandation propre à un dépôt.
+- **Audit d'un dépôt** : seulement si l'utilisateur parle de « ce dépôt » ou en nomme un. Filtre alors avec `--project <nom du dossier>`.
+
+Le dossier où tu travailles ne décide pas du périmètre. Un audit global lancé depuis un dépôt reste global.
 
 ### 2. Produire le digest
 Le script se trouve dans `scripts/history_audit.py`, à côté de ce fichier : `~/.copilot/skills/copilot-session-analyzer/` en installation personnelle, `.github/skills/copilot-session-analyzer/` dans un dépôt. Il n'utilise que la bibliothèque standard de Python 3.8+.
 
 ```bash
-python "<dossier du skill>/scripts/history_audit.py" --source copilot --days 30 --out "<dossier temporaire>/copilot-digest.md"
+python "<dossier du skill>/scripts/history_audit.py" --source copilot --out "<dossier temporaire>/copilot-digest.md"
 ```
 
 - Lance-le avec l'outil terminal (mode agent ou CLI). En mode Ask, sans terminal, donne la commande à l'utilisateur et demande-lui de joindre le fichier produit.
 - Sous Windows, utilise `python` ou `py` ; sous macOS et Linux, `python3`.
 - Écris le digest hors du dépôt (dossier temporaire), pour ne pas le committer par erreur.
-- Si le digest est vide, lance `--list-sources`, puis élargis avec `--days 0`. Si VS Code est installé à un endroit inhabituel, passe `--vscode-user-dir <chemin du dossier User>`.
-- Si tu connais le dossier du dépôt (l'utilisateur te l'a donné, ou tu y travailles), passe `--cwd <dossier du dépôt>` : c'est là que le script cherche les instructions, prompt files et skills déjà en place. Si les limites du digest signalent des dossiers de projet introuvables, l'existant n'a pas été vérifié : ne conclus pas que rien n'existe.
+- Si le digest est vide, lance `--list-sources`. Si VS Code est installé à un endroit inhabituel, passe `--vscode-user-dir <chemin du dossier User>`.
+- Si tu connais le dossier du dépôt (l'utilisateur te l'a donné, ou tu y travailles), passe `--cwd <dossier du dépôt>` : c'est là que le script cherche les instructions, prompt files et skills déjà en place. `--cwd` sert **uniquement** à vérifier l'existant : il ne restreint pas les sessions analysées et ne doit pas orienter les recommandations vers ce dépôt. Si les limites du digest signalent des dossiers de projet introuvables, l'existant n'a pas été vérifié : ne conclus pas que rien n'existe.
 - La conversation d'audit en cours fait partie de l'historique : ignore-la dans ta lecture.
 
 ### 3. Lire, puis vérifier sans tout relire
@@ -113,10 +124,10 @@ Termine en proposant de créer la recommandation n° 1. Si le plugin `skill-crea
 |---|---|
 | `--source copilot-cli` / `vscode` / `jetbrains` | Une seule source |
 | `--jetbrains-diagnose` | Décrit les bases JetBrains trouvées (structure + 3 courts extraits ; `--no-excerpts` pour aucun texte) |
-| `--days N` | Sessions actives dans les N derniers jours (`0` = tout) |
+| `--days N` | Sessions actives dans les N derniers jours (par défaut `0` = tout l'historique) |
 | `--project texte` | Filtre sur le nom ou le chemin du projet |
 | `--exclude-project texte` | Ignore les sessions dont le nom de projet ou le chemin contient ce texte (ex. `billing-api`) |
-| `--cwd dossier` | Dossier du dépôt où chercher l'existant (instructions, prompt files, skills) |
+| `--cwd dossier` | Dossier du dépôt où chercher l'existant (instructions, prompt files, skills) ; ne change pas le périmètre |
 | `--grep "motif"` | Compte et illustre les demandes qui correspondent (`--grep-replies` : dans les réponses) |
 | `--show-session id` | Vue compacte d'une session (`--full` : tous les tours) |
 | `--format json` | Sortie structurée |

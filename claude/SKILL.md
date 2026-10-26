@@ -17,18 +17,29 @@ Le partage du travail est simple : le script compte (tours, corrections, demande
 ## Déroulé
 
 ### 1. Cadrer, sans sur-questionner
-Par défaut : les 30 derniers jours et tous les projets. Si l'utilisateur parle de « ce projet », filtre avec `--project <nom du dossier courant>`. Ne pose une question que si la demande est vraiment ambiguë.
+Par défaut : tous les projets. Pose une seule question de cadrage, et seulement sur ce qui manque :
+
+- **La période.** Si l'utilisateur ne l'a pas donnée, demande-lui combien de temps analyser, en proposant : tout l'historique (conseillé pour un premier audit), le dernier mois, ou une autre durée. Traduis sa réponse en `--days N` (`0` = tout). « Depuis le début » ou « sur tout mon historique » répondent déjà à la question, comme « ce mois-ci » ou « mes 10 derniers jours ».
+- **Le périmètre**, seulement si la demande hésite vraiment entre tous les projets et un seul.
+
+Si tu ne peux pas poser de question (exécution non interactive), prends tout l'historique et annonce ce choix en tête du rapport.
+
+Distingue deux types d'audit, et annonce le type choisi en tête du rapport :
+- **Audit global** : c'est le cas par défaut, et en particulier quand l'utilisateur dit « depuis le début », « en général » ou « sur tout mon historique ». Le rapport couvre tous les projets du digest avant toute recommandation propre à un projet.
+- **Audit d'un projet** : seulement si l'utilisateur parle de « ce projet » ou en nomme un. Filtre alors avec `--project <nom du dossier>`.
+
+Le dossier courant ne décide pas du périmètre. Un audit global lancé depuis un projet reste global. Le script y cherche seulement l'existant (`--cwd`, par défaut le dossier courant).
 
 ### 2. Produire le digest
 Le script se trouve dans `scripts/history_audit.py`, à côté de ce fichier (en général `~/.claude/skills/claude-session-analyzer/`). Il n'utilise que la bibliothèque standard de Python 3.8+.
 
 ```bash
-python "<dossier du skill>/scripts/history_audit.py" --source claude --days 30 --out "<dossier temporaire>/digest.md"
+python "<dossier du skill>/scripts/history_audit.py" --source claude --out "<dossier temporaire>/digest.md"
 ```
 
 - Sous Windows, utilise `python` ou `py` ; sous macOS et Linux, `python3`.
 - Écris le digest dans le dossier temporaire de la session (scratchpad), pas dans le projet de l'utilisateur.
-- Si le digest est vide, lance `--list-sources` pour voir ce qui existe, puis élargis `--days 0` (tout l'historique disponible).
+- Si le digest est vide, lance `--list-sources` pour voir ce qui existe.
 - La session d'audit en cours fait partie de l'historique. Exclus-la avec `--exclude-session <id>` si tu connais son identifiant ; si l'audit tourne depuis un dossier dédié (dépôt de skills, dossier d'outillage), exclus tout ce dossier avec `--exclude-project <nom>`. Les totaux restent ainsi justes.
 - Sans Python disponible : lis quelques fichiers `.jsonl` récents. Les demandes de l'utilisateur sont les lignes `"type":"user"` dont `message.content` est une chaîne. Signale que l'analyse est partielle.
 

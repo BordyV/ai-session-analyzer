@@ -75,14 +75,14 @@ Le script s'utilise aussi seul :
 
 ```bash
 python common/scripts/history_audit.py --list-sources
-python common/scripts/history_audit.py --source claude --days 30
+python common/scripts/history_audit.py --source claude
 python common/scripts/history_audit.py --source copilot --show-session 5f2c      # vue compacte (--full : tout)
 python common/scripts/history_audit.py --source claude --grep "commit|push"       # vérifier une hypothèse en une ligne
 ```
 
 ### Période analysée et rétention de l'historique
 
-- `--days N` choisit la période : `--days 10` pour les 10 derniers jours, `--days 0` pour tout l'historique disponible. En langage naturel (« analyse mes 10 derniers jours »), le skill le traduit lui-même.
+- `--days N` choisit la période : `--days 10` pour les 10 derniers jours. Par défaut (`--days 0`), tout l'historique disponible est lu. En langage naturel (« analyse mes 10 derniers jours »), le skill le traduit lui-même.
 - **On ne remonte qu'aussi loin que l'historique conservé.** Claude Code supprime les transcripts inactifs depuis plus de `cleanupPeriodDays` jours (30 par défaut). Pour garder plus longtemps, ajoute dans `~/.claude/settings.json` :
 
   ```json
