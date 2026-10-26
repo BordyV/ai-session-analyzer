@@ -21,7 +21,7 @@ The script does the counting; the agent does the judgment. It produces a compact
 
 Examples:
   python history_audit.py --list-sources
-  python history_audit.py --source claude --days 30
+  python history_audit.py --source claude --days 30   # last 30 days only (default: all)
   python history_audit.py --source copilot --days 14 --project my-repo --out digest.md
   python history_audit.py --source claude --show-session 3f2a
   python history_audit.py --source all --format json --out digest.json
@@ -2736,7 +2736,7 @@ def main(argv=None):
     ap = argparse.ArgumentParser(description="Audit local Claude Code / GitHub Copilot chat history.")
     ap.add_argument("--source", default="all", choices=sorted(SOURCE_ALIASES),
                     help="claude, copilot (= copilot-cli + vscode), copilot-cli, vscode, all")
-    ap.add_argument("--days", type=int, default=30, help="only sessions active in the last N days (0 = all)")
+    ap.add_argument("--days", type=int, default=0, help="only sessions active in the last N days (default 0 = all)")
     ap.add_argument("--project", help="keep sessions whose project name or cwd contains this text")
     ap.add_argument("--exclude-session", action="append", help="session id prefix to ignore (repeatable)")
     ap.add_argument("--exclude-project", action="append",

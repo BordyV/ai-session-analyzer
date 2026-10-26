@@ -10,7 +10,7 @@ Creates:
   <out>/repo/.github/...                                                 a repo with instructions + a prompt file
   <out>/copilot-home-multi/session-state/...                             Copilot CLI history over several projects
 
-Timestamps are relative to "now" so the default --days 30 window always matches.
+Timestamps are relative to "now" so a --days 30 window always matches.
 Scenario: a Java team on `billing-api` keeps asking for the same JUnit tests and REST endpoints,
 corrects Copilot about the same conventions (AssertJ, @DisplayName, RFC 7807), and loops on `mvn test`.
 """
