@@ -17,7 +17,12 @@ Le partage du travail est simple : le script compte (tours, corrections, demande
 ## Déroulé
 
 ### 1. Cadrer, sans sur-questionner
-Par défaut : tout l'historique disponible et tous les projets. Si l'utilisateur donne une période (« ce mois-ci », « mes 10 derniers jours »), traduis-la en `--days N`. Ne pose une question que si la demande est vraiment ambiguë.
+Par défaut : tous les projets. Pose une seule question de cadrage, et seulement sur ce qui manque :
+
+- **La période.** Si l'utilisateur ne l'a pas donnée, demande-lui combien de temps analyser, en proposant : tout l'historique (conseillé pour un premier audit), le dernier mois, ou une autre durée. Traduis sa réponse en `--days N` (`0` = tout). « Depuis le début » ou « sur tout mon historique » répondent déjà à la question, comme « ce mois-ci » ou « mes 10 derniers jours ».
+- **Le périmètre**, seulement si la demande hésite vraiment entre tous les projets et un seul.
+
+Si tu ne peux pas poser de question (exécution non interactive), prends tout l'historique et annonce ce choix en tête du rapport.
 
 Distingue deux types d'audit, et annonce le type choisi en tête du rapport :
 - **Audit global** : c'est le cas par défaut, et en particulier quand l'utilisateur dit « depuis le début », « en général » ou « sur tout mon historique ». Le rapport couvre tous les projets du digest avant toute recommandation propre à un projet.

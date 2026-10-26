@@ -5,7 +5,7 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 ```markdown
 # Audit de l'historique <Claude Code | GitHub Copilot> — <date de début> → <date de fin>
 
-Périmètre : <audit global, N projets | audit du projet X> · existant vérifié dans : <profil, projets analysés, dossier --cwd>
+Période : <tout l'historique | N derniers jours>, choisie par <l'utilisateur | défaut, sans réponse possible> · périmètre : <audit global, N projets | audit du projet X> · existant vérifié dans : <profil, projets analysés, dossier --cwd>
 
 ## En bref
 <Mêmes chiffres que le corps, avec des ratios plutôt que « toujours » ou « presque toujours ».>
