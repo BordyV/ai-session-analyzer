@@ -33,7 +33,13 @@ Ce skill va plus loin : il couvre plusieurs projets, inclut VS Code, chiffre les
 ## Déroulé
 
 ### 1. Cadrer, sans sur-questionner
-Par défaut : les 30 derniers jours, toutes les sources présentes (CLI, VS Code, JetBrains) et tous les projets. Si l'utilisateur parle de « ce dépôt », filtre avec `--project <nom du dossier>`. Ne pose une question que si la demande est vraiment ambiguë.
+Par défaut : les 30 derniers jours, toutes les sources présentes (CLI, VS Code, JetBrains) et tous les projets. Ne pose une question que si la demande est vraiment ambiguë.
+
+Distingue deux types d'audit, et annonce le type choisi en tête du rapport :
+- **Audit global** : c'est le cas par défaut, et en particulier quand l'utilisateur dit « depuis le début », « en général » ou « sur tout mon historique » (alors `--days 0`). Le rapport couvre tous les projets du digest avant toute recommandation propre à un dépôt.
+- **Audit d'un dépôt** : seulement si l'utilisateur parle de « ce dépôt » ou en nomme un. Filtre alors avec `--project <nom du dossier>`.
+
+Le dossier où tu travailles ne décide pas du périmètre. Un audit global lancé depuis un dépôt reste global.
 
 ### 2. Produire le digest
 Le script se trouve dans `scripts/history_audit.py`, à côté de ce fichier : `~/.copilot/skills/copilot-session-analyzer/` en installation personnelle, `.github/skills/copilot-session-analyzer/` dans un dépôt. Il n'utilise que la bibliothèque standard de Python 3.8+.
@@ -46,7 +52,7 @@ python "<dossier du skill>/scripts/history_audit.py" --source copilot --days 30 
 - Sous Windows, utilise `python` ou `py` ; sous macOS et Linux, `python3`.
 - Écris le digest hors du dépôt (dossier temporaire), pour ne pas le committer par erreur.
 - Si le digest est vide, lance `--list-sources`, puis élargis avec `--days 0`. Si VS Code est installé à un endroit inhabituel, passe `--vscode-user-dir <chemin du dossier User>`.
-- Si tu connais le dossier du dépôt (l'utilisateur te l'a donné, ou tu y travailles), passe `--cwd <dossier du dépôt>` : c'est là que le script cherche les instructions, prompt files et skills déjà en place. Si les limites du digest signalent des dossiers de projet introuvables, l'existant n'a pas été vérifié : ne conclus pas que rien n'existe.
+- Si tu connais le dossier du dépôt (l'utilisateur te l'a donné, ou tu y travailles), passe `--cwd <dossier du dépôt>` : c'est là que le script cherche les instructions, prompt files et skills déjà en place. `--cwd` sert **uniquement** à vérifier l'existant : il ne restreint pas les sessions analysées et ne doit pas orienter les recommandations vers ce dépôt. Si les limites du digest signalent des dossiers de projet introuvables, l'existant n'a pas été vérifié : ne conclus pas que rien n'existe.
 - La conversation d'audit en cours fait partie de l'historique : ignore-la dans ta lecture.
 
 ### 3. Lire, puis vérifier sans tout relire
@@ -116,7 +122,7 @@ Termine en proposant de créer la recommandation n° 1. Si le plugin `skill-crea
 | `--days N` | Sessions actives dans les N derniers jours (`0` = tout) |
 | `--project texte` | Filtre sur le nom ou le chemin du projet |
 | `--exclude-project texte` | Ignore les sessions dont le nom de projet ou le chemin contient ce texte (ex. `billing-api`) |
-| `--cwd dossier` | Dossier du dépôt où chercher l'existant (instructions, prompt files, skills) |
+| `--cwd dossier` | Dossier du dépôt où chercher l'existant (instructions, prompt files, skills) ; ne change pas le périmètre |
 | `--grep "motif"` | Compte et illustre les demandes qui correspondent (`--grep-replies` : dans les réponses) |
 | `--show-session id` | Vue compacte d'une session (`--full` : tous les tours) |
 | `--format json` | Sortie structurée |

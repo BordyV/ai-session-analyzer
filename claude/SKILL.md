@@ -17,7 +17,13 @@ Le partage du travail est simple : le script compte (tours, corrections, demande
 ## Déroulé
 
 ### 1. Cadrer, sans sur-questionner
-Par défaut : les 30 derniers jours et tous les projets. Si l'utilisateur parle de « ce projet », filtre avec `--project <nom du dossier courant>`. Ne pose une question que si la demande est vraiment ambiguë.
+Par défaut : les 30 derniers jours et tous les projets. Ne pose une question que si la demande est vraiment ambiguë.
+
+Distingue deux types d'audit, et annonce le type choisi en tête du rapport :
+- **Audit global** : c'est le cas par défaut, et en particulier quand l'utilisateur dit « depuis le début », « en général » ou « sur tout mon historique » (alors `--days 0`). Le rapport couvre tous les projets du digest avant toute recommandation propre à un projet.
+- **Audit d'un projet** : seulement si l'utilisateur parle de « ce projet » ou en nomme un. Filtre alors avec `--project <nom du dossier>`.
+
+Le dossier courant ne décide pas du périmètre. Un audit global lancé depuis un projet reste global. Le script y cherche seulement l'existant (`--cwd`, par défaut le dossier courant).
 
 ### 2. Produire le digest
 Le script se trouve dans `scripts/history_audit.py`, à côté de ce fichier (en général `~/.claude/skills/claude-session-analyzer/`). Il n'utilise que la bibliothèque standard de Python 3.8+.

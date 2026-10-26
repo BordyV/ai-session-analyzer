@@ -5,6 +5,8 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 ```markdown
 # Audit de l'historique <Claude Code | GitHub Copilot> — <date de début> → <date de fin>
 
+Périmètre : <audit global, N projets | audit du projet X> · existant vérifié dans : <profil, projets analysés, dossier --cwd>
+
 ## En bref
 <Mêmes chiffres que le corps, avec des ratios plutôt que « toujours » ou « presque toujours ».>
 - <Verdict principal, ex. : « 2 automatisations valent le coup, 1 règle à ajouter, le reste ne mérite rien »>
@@ -15,6 +17,12 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 | Sessions | Demandes | Tours médians / session | Sessions ≥ 8 tours | Sessions avec corrections |
 |---|---|---|---|---|
 | … | … | … | … | … |
+
+## Répartition par domaine de travail
+<Seulement pour un audit global qui couvre plusieurs projets. Regroupe les sessions en thèmes transverses, par la nature du travail plutôt que par le dépôt (ex. : traitements batch, outillage d'analyse, transformations de données, migration). Un domaine peut couvrir plusieurs projets.>
+| Domaine | Projets | Sessions | Ce qui revient |
+|---|---|---|---|
+| … | … | … | … |
 
 ## Là où ça tourne en rond
 <3 à 5 épisodes maximum, les plus coûteux. Pour chacun :>
@@ -33,7 +41,10 @@ Utilise cette structure. Adapte la longueur à la quantité de données : un his
 
 ## Recommandations, par priorité
 
+<Chaque recommandation annonce sa portée. Pour un audit global, classe-les dans cet ordre de lecture : ce qui sert à tous les projets, puis ce qui est propre à un dépôt. Améliorer un skill ou une instruction existants passe avant en créer un nouveau, à preuves égales.>
+
 ### 1. <Créer un skill | Ajouter une règle | Prompt réutilisable | Hook / contrôle automatisé | Améliorer l'existant> : <nom>
+- **Portée** : <tous les projets (profil) | dépôt X | amélioration de <existant> | nouveau skill>
 - **Preuves** : <occurrences, sessions, corrections typiques>
 - **Gain estimé** : <calcul en tours économisés par mois ; à défaut, erreurs ou appels d'outils évités par mois, jamais seulement « difficile à chiffrer »>
 - **Emplacement** : `<chemin exact>`

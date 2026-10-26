@@ -47,6 +47,24 @@
         "Les recherches --grep sont conservées (--grep-log), et chaque chiffre --grep cité vient d'un motif dont les exemples sont dans le sujet (pas de faux positif évident)",
         "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
       ]
+    },
+    {
+      "id": 3,
+      "prompt": "Depuis le début, en général : qu'est-ce que je redemande tout le temps à Copilot, et qu'est-ce qui mériterait un skill ou une instruction ? Mon dossier Copilot CLI est tests/fixtures/copilot-home-multi. Je lance ça depuis le dépôt billing-api, qui est en tests/fixtures/repo.",
+      "expected_output": "Audit global (--days 0, sans --project) annoncé comme tel, couvrant billing-api, batch-exports, batch-relances et log-analyzer. Répartition par domaine (tests Java, traitements batch, analyse de logs). Le thème batch, présent dans deux dépôts, donne une recommandation de portée profil (~/.copilot) ; les conventions de test restent propres à billing-api. --cwd sert seulement à vérifier l'existant.",
+      "files": [],
+      "assertions": [
+        "Le digest est produit sur tout l'historique (--days 0) et sans filtre --project",
+        "Le rapport annonce un audit global et couvre les 4 projets : billing-api, batch-exports, batch-relances, log-analyzer",
+        "Le rapport contient une répartition par domaine de travail qui regroupe batch-exports et batch-relances dans un même domaine (traitements batch)",
+        "La demande récurrente de job batch (skip policy et reprise sur erreur oubliées, 4 sessions sur 2 dépôts) donne une recommandation de portée « tous les projets » ou profil (~/.copilot), pas un fichier dans le dépôt billing-api",
+        "Les conventions de test AssertJ / @DisplayName sont présentées comme propres au dépôt billing-api (.github)",
+        "Chaque recommandation annonce sa portée (tous les projets, un dépôt, amélioration de l'existant, nouveau skill)",
+        "Le rapport présente le dossier --cwd (billing-api) comme l'endroit où l'existant a été vérifié, pas comme le périmètre de l'audit, et tient compte du prompt file /nouveau-endpoint et du skill release-notes existants",
+        "La demande unique d'analyse de logs (log-analyzer, 1 session) est classée dans ce qui ne mérite pas d'automatisation",
+        "Sobriété : au plus 5 sessions ouvertes avec --show-session, aucun script d'extraction écrit et aucun fichier de session (.jsonl, events.jsonl, chatSessions) lu directement",
+        "Aucun fichier de configuration de l'utilisateur n'a été modifié (CLAUDE.md, skills, settings, dépôt)"
+      ]
     }
   ]
 }

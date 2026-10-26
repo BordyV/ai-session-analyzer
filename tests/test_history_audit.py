@@ -25,6 +25,7 @@ make_fixtures.build_vscode(FIXTURES)
 make_fixtures.build_claude(FIXTURES)
 make_fixtures.build_jetbrains(FIXTURES)
 make_fixtures.build_repo(FIXTURES)
+make_fixtures.build_multi(FIXTURES)
 
 COMMON = ["--copilot-home", os.path.join(FIXTURES, "copilot-home"),
           "--vscode-user-dir", os.path.join(FIXTURES, "vscode-user"),
@@ -134,6 +135,35 @@ class CopilotTests(unittest.TestCase):
         un = self.d["unscoped"]
         self.assertFalse(self.d["unscoped_filtered"])
         self.assertIn("@MockBean", " ".join(" ".join(x["first"]) for x in un["sessions"]))
+
+    def test_cwd_is_reported_as_lookup_not_scope(self):
+        lk = self.d["existing_lookup"]
+        self.assertFalse(lk["cwd_default"])
+        self.assertTrue(lk["cwd"].endswith("repo"))
+        self.assertGreater(self.d["overview"]["projects"], 1)  # --cwd does not narrow the sessions analysed
+        code, out = run("--source", "copilot")
+        self.assertEqual(code, 0)
+        self.assertIn("Périmètre de l'audit : **tous les projets", out)
+        self.assertIn("passé explicitement", out)
+
+    def test_global_audit_from_one_repo_covers_all_projects(self):
+        argv = ["--source", "copilot-cli", "--days", "0", "--format", "json",
+                "--copilot-home", os.path.join(FIXTURES, "copilot-home-multi"), "--cwd", os.path.join(FIXTURES, "repo")]
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(ha.main(argv), 0)
+        d = json.loads(buf.getvalue())
+        self.assertEqual(set(d["overview"]["by_project"]), {"billing-api", "batch-exports", "batch-relances", "log-analyzer"})
+        batch = [c for c in d["recurring_requests"] if "batch" in json.dumps(c, ensure_ascii=False)]
+        self.assertTrue(batch)
+        self.assertTrue(any({"batch-exports", "batch-relances"} <= set(c["projects"]) for c in batch))
+
+    def test_cwd_default_is_flagged(self):
+        argv = ["--source", "copilot"] + COMMON[:-2]  # no --cwd
+        buf = io.StringIO()
+        with redirect_stdout(buf):
+            self.assertEqual(ha.main(argv), 0)
+        self.assertIn("dossier courant, par défaut", buf.getvalue())
 
     def test_unverified_existing_is_said(self):
         argv = ["--source", "copilot"] + COMMON[:-1] + [os.path.join(FIXTURES, "vscode-user")]  # --cwd without the repo
